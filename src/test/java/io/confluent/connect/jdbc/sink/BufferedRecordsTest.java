@@ -60,7 +60,73 @@ public class BufferedRecordsTest {
   public void tearDown() throws IOException, SQLException {
     sqliteHelper.tearDown();
   }
-  
+  //after updated相同测试
+ @Test
+  public void testSameNameSchema() throws SQLException{
+    //构建配置文件选项
+    final HashMap<Object,Object> props = new HashMap<>();
+    props.put("connection.url",sqliteHelper.sqliteUri());
+    props.put("auto.create",true);
+    props.put("auto.evolve", true);
+    props.put("batch.size",1000);
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    //根据自动选择最佳函数，创建dbDialect，再根据dbDialect创建Dbstructure
+    final String url = sqliteHelper.sqliteUri();
+    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+    //构建BufferRecords
+    final TableId tableId = new TableId(null, null, "dummy");
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
+/*
+    //创建记录的schema和value
+    //创建after内部的结构
+    final Schema schemaInner = SchemaBuilder.struct()
+        .field("id",Schema.INT32_SCHEMA)
+        .field("ts",Schema.INT32_SCHEMA)
+        .field("age",Schema.INT32_SCHEMA)
+        .field("name",Schema.STRING_SCHEMA)
+        .build();
+    //创建上一层的结构
+    final Schema schemaA = SchemaBuilder.struct()
+        .field("updated", Schema.STRING_SCHEMA)
+        .field("after", schemaInner)
+        .build();
+    //给创建好的结构赋值
+    final Struct valueInner = new Struct(schemaInner)
+        .put("id",1)
+        .put("ts",100)
+        .put("age", 22)
+        .put("name", "nick");
+    //给外层赋值
+    final Struct valueA = new Struct(schemaA)
+        .put("updated","333")
+        .put("after",valueInner);
+    //根据刚才的Struct value 构建SinkRecord
+    final SinkRecord recordA = new  SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
+    //拆分内层结构，测试我们更改的方法
+    final SinkRecord recordExpanded = buffer.valueSchemaExpand(recordA);
+    System.out.println(recordExpanded.toString());
+    
+*/
+
+    // ---------------------
+    
+    
+    final Schema schemaB = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .field("age", Schema.INT32_SCHEMA)
+        .field("updated", Schema.STRING_SCHEMA)
+        .field("after", Schema.STRING_SCHEMA)
+        .build();
+    final Struct valueB = new Struct(schemaB)
+        .put("id",1)
+        .put("age",26)
+        .put("updated","333")
+        .put("after","afterValue");
+        final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
+        final SinkRecord recordExpandedB = buffer.valueSchemaExpand(recordB);
+    assert(recordB.equals(recordExpandedB));
+  }
  @Test
   public void testSchemaExpend() throws SQLException{
     final HashMap<Object, Object> props = new HashMap<>();
