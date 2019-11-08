@@ -34,12 +34,12 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Random;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.GreenplumDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.RecordType;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
 public class BufferedRecordsTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
-
+  private final RecordHeader recordHeader = new RecordHeader();
   @Before
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
@@ -60,7 +60,8 @@ public class BufferedRecordsTest {
   public void tearDown() throws IOException, SQLException {
     sqliteHelper.tearDown();
   }
-  //after updated相同测试
+
+  //after updated相同测试 
  @Test
   public void testSameNameSchema() throws SQLException{
     //构建配置文件选项
@@ -77,40 +78,6 @@ public class BufferedRecordsTest {
     //构建BufferRecords
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-/*
-    //创建记录的schema和value
-    //创建after内部的结构
-    final Schema schemaInner = SchemaBuilder.struct()
-        .field("id",Schema.INT32_SCHEMA)
-        .field("ts",Schema.INT32_SCHEMA)
-        .field("age",Schema.INT32_SCHEMA)
-        .field("name",Schema.STRING_SCHEMA)
-        .build();
-    //创建上一层的结构
-    final Schema schemaA = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", schemaInner)
-        .build();
-    //给创建好的结构赋值
-    final Struct valueInner = new Struct(schemaInner)
-        .put("id",1)
-        .put("ts",100)
-        .put("age", 22)
-        .put("name", "nick");
-    //给外层赋值
-    final Struct valueA = new Struct(schemaA)
-        .put("updated","333")
-        .put("after",valueInner);
-    //根据刚才的Struct value 构建SinkRecord
-    final SinkRecord recordA = new  SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    //拆分内层结构，测试我们更改的方法
-    final SinkRecord recordExpanded = buffer.valueSchemaExpand(recordA);
-    System.out.println(recordExpanded.toString());
-    
-*/
-
-    // ---------------------
-    
     
     final Schema schemaB = SchemaBuilder.struct()
         .field("id", Schema.INT32_SCHEMA)
@@ -123,9 +90,10 @@ public class BufferedRecordsTest {
         .put("age",26)
         .put("updated","333")
         .put("after","afterValue");
-        final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-        final SinkRecord recordExpandedB = buffer.valueSchemaExpand(recordB);
-    assert(recordB.equals(recordExpandedB));
+    final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
+    RecordHeader recordHeader = new RecordHeader();
+    RecordType recordType = recordHeader.getRecordType(recordB);
+    assert(recordType.equals(RecordType.OTHER));
   }
  @Test
   public void testSchemaExpend() throws SQLException{
@@ -166,7 +134,7 @@ public class BufferedRecordsTest {
         .put("after", valueInner);
 
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    SinkRecord recordExpended = buffer.valueSchemaExpand(recordA);
+    SinkRecord recordExpended = recordHeader.expandValueSchema(recordA);
 
     final Schema schemaB = SchemaBuilder.struct()
         .field("id", Schema.INT32_SCHEMA)
@@ -184,7 +152,7 @@ public class BufferedRecordsTest {
     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
     assert(recordB.equals(recordExpended));
 
-    final SinkRecord recordC = buffer.valueSchemaExpand(recordB);
+    final SinkRecord recordC = recordHeader.expandValueSchema(recordB);
     assert(recordC.equals(recordB));
 
   }
