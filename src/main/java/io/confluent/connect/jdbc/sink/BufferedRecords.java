@@ -15,11 +15,7 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.kafka.common.header.internals.RecordHeader;
-import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
-import org.apache.kafka.connect.data.SchemaBuilder;
-import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.apache.kafka.connect.errors.DataException;
 import org.apache.kafka.connect.errors.SchemaBuilderException;
@@ -85,173 +81,11 @@ public class BufferedRecords {
     this.connection = connection;
   }
 
-  //Transform the value-schema and expand the nested STRUCT structure 
-  //on the top layer, for example:
-  //Schema Before:
-  // Schema {t_avro_envelope:STRUCT}
-  //    |
-  //    +--Field {name=updated, schema=STRING}
-  //    +--Field {name=after, schema={t_avro:STRUCT}}
-  //                              |
-  //                              +--Field {name=id, schema=INT64}
-  //                              +--Field {name=ts, schema=INT64}
-  //                              +--Field {name=age, schema=INT64}
-  //                              +--Field {name=name, schema=STRING}
-  //Schema After:                      
-  // Schema {t_avro_envelope:STRUCT}
-  //    |
-  //    +--Field {name=id, schema=INT64}
-  //    +--Field {name=ts, schema=INT64}
-  //    +--Field {name=age, schema=INT64}
-  //    +--Field {name=name, schema=STRING}    
-  //
-  //Value Before:
-  // Schema {t_avro_envelope:STRUCT}
-  //    |
-  //    +--Field {name=updated, value="111"}
-  //    +--Field {name=after, value={t_avro:STRUCT}}
-  //                              |
-  //                              +--Field {name=id, value=1}
-  //                              +--Field {name=ts, value=100}
-  //                              +--Field {name=age, value=20}
-  //                              +--Field {name=name, value="nick"}
-  //Value Before:
-  // Schema {t_avro_envelope:STRUCT}
-  //    |
-  //    +--Field {name=after, value={t_avro:STRUCT}}
-  //                              |
-  //                              +--Field {name=id, value=1}
-  //                              +--Field {name=ts, value=100}
-  //                              +--Field {name=age, value=20}
-  //                              +--Field {name=name, value="nick"}
-  //Value After:                      
-  // Schema {t_avro_envelope:STRUCT}
-  //    |
-  //    +--Field {name=id, value=1}
-  //    +--Field {name=ts, value=100}
-  //    +--Field {name=age, value=20}
-  //    +--Field {name=name, value="nick"}    
-  SinkRecord valueSchemaExpand(SinkRecord record) {
-    // This record is not sent by DRDB
-    Schema orgiValueSchema = record.valueSchema();
-    if (isNull(orgiValueSchema)) {
-      return record;
-    }
-
-    Field updatedField = orgiValueSchema.field("updated");
-    Field afterField = orgiValueSchema.field("after");
-    if (isNull(updatedField) || isNull(afterField)) {
-      return record;
-    }
-
-    SchemaBuilder schemaBuilder = SchemaBuilder.struct();
-    //schemaBuilder.field(updatedField.name(), updatedField.schema());
-    for (Field field : afterField.schema().fields()) {
-      schemaBuilder.field(field.name(), field.schema());
-    }
-
-    final Schema valueSchema = schemaBuilder.build();
-
-    Struct valueStruct = (Struct) record.value();
-    if (isNull(valueStruct)) {
-      return record;
-    }
-  
-    Struct afterValueStruct = (Struct)valueStruct.get(afterField);
-    if (isNull(afterValueStruct)) {
-      //delete record
-      return record.newRecord(record.topic(), record.kafkaPartition(), 
-                              record.keySchema() , record.key(), 
-                              null,null, 
-                              record.timestamp(), record.headers());
-    } else {
-      Struct value = new Struct(valueSchema);
-      //value.put(updatedField.name(), valueStruct.get(updatedField));
-      for (Field field : afterField.schema().fields()) {
-        value.put(field.name(), afterValueStruct.get(field));
-      }
-      //upsert record
-      return record.newRecord(record.topic(), record.kafkaPartition(), 
-                              record.keySchema() , record.key(), 
-                              valueSchema, value, 
-                              record.timestamp(), record.headers());
-    }
-  }
-
-  SinkRecord expand(SinkRecord record) {
-    // This record is not sent by DRDB
-
-    Schema orgiValueSchema = record.valueSchema();
-    if (isNull(orgiValueSchema)) {
-      return record;
-    }
-
-    Field afterField = orgiValueSchema.field("after");
-
-    if (isNull(afterField)) {
-      return record;
-    }
-
-    SchemaBuilder schemaBuilder = SchemaBuilder.struct();
-
-      schemaBuilder = schemaDelayer(afterField, schemaBuilder);
-    
-    final Schema valueSchema = schemaBuilder.build();
-
-    Struct valueStruct = (Struct) record.value();
-    if (isNull(valueStruct)) {
-      return record;
-    }
-  
-    Struct afterValueStruct = (Struct)valueStruct.get(afterField);
-    if (isNull(afterValueStruct)) {
-      //delete record
-      return record.newRecord(record.topic(), record.kafkaPartition(), 
-                              record.keySchema() , record.key(), 
-                              null,null, 
-                              record.timestamp(), record.headers());
-    } else {
-      Struct value = new Struct(valueSchema);
-
-        value = valueDelayer(value, afterField, afterValueStruct);
-
-      //upsert record
-      return record.newRecord(record.topic(), record.kafkaPartition(), 
-                              record.keySchema() , record.key(), 
-                              valueSchema, value, 
-                              record.timestamp(), record.headers());
-    }
-  }
-
-  private SchemaBuilder schemaDelayer(Field fields, SchemaBuilder schemaBuilder) {
-      for (Field field : fields.schema().fields()){
-        if (field.schema().type().equals(Schema.Type.STRUCT)){
-          schemaBuilder = schemaDelayer(field, schemaBuilder);
-        } else {
-          schemaBuilder.field(field.name(), field.schema());
-        }
-      }
-    return schemaBuilder;
-  }
-
-  private Struct valueDelayer(Struct value, Field afterField, Struct afterValueStruct) {
-      for (Field field : afterField.schema().fields()){
-        if (field.schema().type().equals(Schema.Type.STRUCT)){
-          Struct vs = (Struct)afterValueStruct.get(field);
-          value = valueDelayer(value, field, vs);
-        } else {
-          value.put(field.name(), afterValueStruct.get(field));
-        }
-      }
-    return value;
-}
-
-  public List<SinkRecord> add(SinkRecord origRecord) throws SQLException {
+  public List<SinkRecord> add(SinkRecord record) throws SQLException {
     final List<SinkRecord> flushed = new ArrayList<>();
-    SinkRecord record = expand(origRecord);
-
+     
     boolean schemaChanged = false;
-	if (!Objects.equals(keySchema, record.keySchema())) {
+	  if (!Objects.equals(keySchema, record.keySchema())) {
       keySchema = record.keySchema();
       schemaChanged = true;
     }

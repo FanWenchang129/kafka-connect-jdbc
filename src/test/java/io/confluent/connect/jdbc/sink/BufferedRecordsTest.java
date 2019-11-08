@@ -39,12 +39,12 @@ import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Random;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
 import io.confluent.connect.jdbc.dialect.DatabaseDialects;
 import io.confluent.connect.jdbc.dialect.GreenplumDatabaseDialect;
 import io.confluent.connect.jdbc.sink.metadata.FieldsMetadata;
+import io.confluent.connect.jdbc.sink.metadata.RecordType;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
 
@@ -55,7 +55,7 @@ import static org.mockito.Mockito.when;
 public class BufferedRecordsTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
-
+  private final RecordHandler recordHandler = new RecordHandler();
   @Before
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
@@ -66,63 +66,66 @@ public class BufferedRecordsTest {
     sqliteHelper.tearDown();
   }
   
-  
+ 
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
+  //after updated相同测试 
   @Test
-  public void testSchemaExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
+  public void testSameNameSchema() throws SQLException{
+    //构建配置文件选项
+    final HashMap<Object,Object> props = new HashMap<>();
+    props.put("connection.url",sqliteHelper.sqliteUri());
+    props.put("auto.create",true);
     props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
+    props.put("batch.size",1000);
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
+    //根据自动选择最佳函数，创建dbDialect，再根据dbDialect创建Dbstructure
     final String url = sqliteHelper.sqliteUri();
     final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
     final DbStructure dbStructure = new DbStructure(dbDialect);
-
+    //构建BufferRecords
     final TableId tableId = new TableId(null, null, "dummy");
     final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
-    final Schema schemaInner = SchemaBuilder.struct()
+    
+    final Schema schemaB = SchemaBuilder.struct()
         .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .field("age",Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
-
-    final Schema schemaA = SchemaBuilder.struct()
+        .field("age", Schema.INT32_SCHEMA)
         .field("updated", Schema.STRING_SCHEMA)
-        .field("after", schemaInner)
+        .field("after", Schema.STRING_SCHEMA)
         .build();
+    final Struct valueB = new Struct(schemaB)
+        .put("id",1)
+        .put("age",26)
+        .put("updated","333")
+        .put("after","afterValue");
+    final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
+    RecordType recordType = recordHandler.getRecordType(recordB);
+        assert (recordType.equals(RecordType.OTHER));
+    }
 
-    final Struct valueInner = new Struct(schemaInner)
-        .put("id", 1)
-        .put("ts", 100)
-        .put("age", 20)
-        .put("name", "nick");
+    @Test
+    public void testSchemaExpend() throws SQLException {
+        final HashMap<Object, Object> props = new HashMap<>();
+        props.put("connection.url", sqliteHelper.sqliteUri());
+        props.put("auto.create", true);
+        props.put("auto.evolve", true);
+        props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
+        final JdbcSinkConfig config = new JdbcSinkConfig(props);
 
-    final Struct valueA = new Struct(schemaA)
-        .put("updated", "123")
-        .put("after", valueInner);
+        final String url = sqliteHelper.sqliteUri();
+        final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
+        final DbStructure dbStructure = new DbStructure(dbDialect);
 
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
     SinkRecord recordExpended = buffer.expand(recordA);
 
-    final Schema schemaB = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
+        final Schema schemaInner = SchemaBuilder.struct().field("id", Schema.INT32_SCHEMA)
+                .field("ts", Schema.INT32_SCHEMA).field("age", Schema.INT32_SCHEMA).field("name", Schema.STRING_SCHEMA)
+                .build();
 
-    final Struct valueB = new Struct(schemaB)
-        .put("id", 1)
-        .put("ts", 100)
-        .put("age", 20)
-        .put("name", "nick");
+        final Schema schemaA = SchemaBuilder.struct().field("updated", Schema.STRING_SCHEMA).field("after", schemaInner)
+                .build();
 
     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
         assert(recordB.equals(recordExpended));
