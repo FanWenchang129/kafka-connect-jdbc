@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import io.confluent.connect.jdbc.dialect.DatabaseDialect;
+import io.confluent.connect.jdbc.sink.metadata.RecordType;
 import io.confluent.connect.jdbc.util.CachedConnectionProvider;
 import io.confluent.connect.jdbc.util.TableId;
 import org.slf4j.Logger;
@@ -56,12 +57,24 @@ public class JdbcDbWriter {
     final Connection connection = cachedConnectionProvider.getConnection();
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
-    for (SinkRecord record : records) {
+    for (SinkRecord record : records) {  
       final TableId tableId = destinationTable(record.topic());
       BufferedRecords buffer = bufferByTable.get(tableId);
       if (buffer == null) {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
         bufferByTable.put(tableId, buffer);
+      }
+      //预处理
+      RecordHandler recordHandler = new RecordHandler();
+      RecordType recordType = recordHandler.getRecordType(record);
+      // System.out.println("record类型是:" + recordType);
+      if (recordType == RecordType.RESOLVED) {
+        recordHandler.updateResolvedTime(record);
+        continue;
+      }
+      if (recordType == RecordType.CDC) {
+
+        record = recordHandler.expandValueSchema(record);
       }
       buffer.add(record);
     }
