@@ -137,9 +137,22 @@ public class RecordHandler {
                             record.key(),valueSchema, value, record.timestamp(), record.headers());
     }
   }
-  /*
-   * public boolean isValid(SinkRecord Record) {
-   * 
-   * }
-   */
+
+  public boolean isValid(SinkRecord record) {
+    Schema origValueSchema = record.valueSchema();
+    Field updatedField = origValueSchema.field("updated");
+    Struct valueStruct = (Struct) record.value();
+    String stringUpdated = (String) valueStruct.get(updatedField);
+
+    int num = stringUpdated.indexOf(".");
+    String interceptUpdated = stringUpdated.substring(0, num);
+    Long updated = Long.parseLong(interceptUpdated);
+
+    TimeCache timeCache = TimeCache.getTimeCacheInstance();
+    if (updated > timeCache.time()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
 }

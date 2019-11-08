@@ -73,8 +73,12 @@ public class JdbcDbWriter {
         continue;
       }
       if (recordType == RecordType.CDC) {
-
-        record = recordHandler.expandValueSchema(record);
+        boolean flag = recordHandler.isValid(record);
+        if (flag) {
+          record = recordHandler.expandValueSchema(record);
+        } else {
+          continue;
+        }
       }
       buffer.add(record);
     }
