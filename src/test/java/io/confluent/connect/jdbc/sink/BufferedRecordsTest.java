@@ -70,24 +70,8 @@ public class BufferedRecordsTest {
   @Rule
   public ExpectedException thrown = ExpectedException.none();
 
-  //after updated相同测试 
   @Test
-  public void testSameNameSchema() throws SQLException{
-    //构建配置文件选项
-    final HashMap<Object,Object> props = new HashMap<>();
-    props.put("connection.url",sqliteHelper.sqliteUri());
-    props.put("auto.create",true);
-    props.put("auto.evolve", true);
-    props.put("batch.size",1000);
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-    //根据自动选择最佳函数，创建dbDialect，再根据dbDialect创建Dbstructure
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-    //构建BufferRecords
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-    
+  public void fwcTestSameNameSchema() throws SQLException{
     final Schema schemaB = SchemaBuilder.struct()
         .field("id", Schema.INT32_SCHEMA)
         .field("age", Schema.INT32_SCHEMA)
@@ -102,135 +86,65 @@ public class BufferedRecordsTest {
     final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
     RecordType recordType = recordHandler.getRecordType(recordB);
         assert (recordType.equals(RecordType.OTHER));
-    }
-
-    @Test
-    public void testSchemaExpend() throws SQLException {
-        final HashMap<Object, Object> props = new HashMap<>();
-        props.put("connection.url", sqliteHelper.sqliteUri());
-        props.put("auto.create", true);
-        props.put("auto.evolve", true);
-        props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-        final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-        final String url = sqliteHelper.sqliteUri();
-        final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-        final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    SinkRecord recordExpended = buffer.expand(recordA);
-
-        final Schema schemaInner = SchemaBuilder.struct().field("id", Schema.INT32_SCHEMA)
-                .field("ts", Schema.INT32_SCHEMA).field("age", Schema.INT32_SCHEMA).field("name", Schema.STRING_SCHEMA)
-                .build();
-
-        final Schema schemaA = SchemaBuilder.struct().field("updated", Schema.STRING_SCHEMA).field("after", schemaInner)
-                .build();
-
-    final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-        assert(recordB.equals(recordExpended));
-    
-    final SinkRecord recordC = buffer.expand(recordB);
-        assert(recordC.equals(recordB));
   }
 
   @Test
-  public void testVoidExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
-    props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
+  public void fwcTestVoidExpend() {
     final Schema schemaInner = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .field("age",Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
+      .field("id", Schema.INT32_SCHEMA)
+      .field("ts", Schema.INT32_SCHEMA)
+      .field("age",Schema.INT32_SCHEMA)
+      .field("name", Schema.STRING_SCHEMA)
+      .build();
 
     final Schema schemaA = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", schemaInner)
-        .build();
+      .field("updated", Schema.STRING_SCHEMA)
+      .field("after", schemaInner)
+      .build();
 
     thrown.expect(DataException.class);
     thrown.expectMessage("Invalid value: null used for required field: \"age\", schema type: INT32");
 
     final Struct valueInner = new Struct(schemaInner)
-        .put("id", 1)
-        .put("ts", 100)
-        .put("age", null)
-        .put("name", "nick");
+      .put("id", 1)
+      .put("ts", 100)
+      .put("age", null)
+      .put("name", "nick");
 
     thrown.expect(DataException.class);
     thrown.expectMessage("Invalid value: null used for required field: \"age\", schema type: INT32");
-
+    
     final Struct valueA = new Struct(schemaA)
-        .put("updated", "123")
-        .put("after", valueInner);
-
+      .put("updated", "123")
+      .put("after", valueInner);
+    
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    SinkRecord recordExpended = buffer.expand(recordA);
-  }
+    RecordHandler handler = new RecordHandler();
+    handler.expandValueSchema(recordA);
+  } 
 
   
   @Test
-  public void testEmptyAfterExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
-    props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
+  public void fwcTestEmptyAfterExpend() {
     final Schema schemaA = SchemaBuilder.struct()
         .field("updated", Schema.STRING_SCHEMA)
         .field("after", Schema.STRING_SCHEMA)
         .build();
-
-    thrown.expect(DataException.class);
-    thrown.expectMessage("Cannot list fields on non-struct type");
 
     final Struct valueA = new Struct(schemaA)
         .put("updated", "")
         .put("after", "");
 
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    SinkRecord recordExpended = buffer.expand(recordA);
+    RecordHandler handler = new RecordHandler();
+
+    thrown.expect(DataException.class);
+    thrown.expectMessage("Cannot list fields on non-struct type");
+    handler.expandValueSchema(recordA);
   }
 
   @Test
-  public void testChangeValueOfUpdatedAndAfterExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
-    props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
+  public void fwcTestSchemaInconsistentWithValue() {
     final Schema schemaA = SchemaBuilder.struct()
         .field("updated", Schema.STRING_SCHEMA)
         .field("after", Schema.BOOLEAN_SCHEMA)
@@ -238,49 +152,13 @@ public class BufferedRecordsTest {
 
     thrown.expect(DataException.class);
     thrown.expectMessage("Invalid Java object for schema type STRING: class java.lang.Boolean for field: \"updated\"");
-
     final Struct valueA = new Struct(schemaA)
         .put("updated", true)
         .put("after", "123");
-
-    final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    SinkRecord recordExpended = buffer.expand(recordA);
   }
 
   @Test
-  public void testExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
-    props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
-    /*
-    the struct of schemaC is like this.
-    schema ++++++++ updated
-                       +
-                    after ++++++++ name
-                                    +
-                                    age
-                                    +
-                                    other1 ++++++++ id
-                                    +               +
-                                    +               ts
-                                    +
-                                    other2 ++++++++ n1
-                                                    +
-                                                    n2
-    we want to the struct of schemaC be like this.
-    schama{updated: " " , name: " " , age: " " ; id: " " , ts: " " , n1: " " , n2 : " " } 
-    */
+  public void fwcTestExpend() {
     final Schema schemaInner2 = SchemaBuilder.struct()
     .field("id", Schema.INT32_SCHEMA)
     .field("ts", Schema.INT32_SCHEMA)
@@ -322,7 +200,8 @@ public class BufferedRecordsTest {
     .put("after", value1);
 
     final SinkRecord record = new SinkRecord("dummy", 0, null, null, schema, value, 0);
-    SinkRecord recordExpended = buffer.expand(record);
+    RecordHandler handler = new RecordHandler();
+    SinkRecord recordExpended = handler.expandValueSchema(record);
 
     final Schema schemaResult = SchemaBuilder.struct()
     .field("name", Schema.STRING_SCHEMA)
@@ -344,57 +223,12 @@ public class BufferedRecordsTest {
     final SinkRecord recordResult = new SinkRecord("dummy", 0, null, null, schemaResult, valueResult, 0);
     assert(recordResult.equals(recordExpended));
 
-    final SinkRecord recordRes = buffer.expand(recordResult);
+    SinkRecord recordRes = handler.expandValueSchema(recordResult);
     assert(recordRes.equals(recordResult));
   }
 
   @Test
-  public void testMultilevelExpend() {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", sqliteHelper.sqliteUri());
-    props.put("auto.create", true);
-    props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    final String url = sqliteHelper.sqliteUri();
-    final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "dummy");
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-
-    /*
-    the struct of schemaC is like this.
-    schema ++++ {t_avro_envelope:STRUCT}
-    |
-    +--Field {name=updated, schema=STRING}
-    +--Field {name=after, schema={t_avro:STRUCT}}
-                    |
-                    +--Field{name=name, schema=STRING}
-                    +--Field{name=age, schema=INT32}
-                    +--Field{name=other1, schema={t_avro:STRUCT}}
-                    |                |
-                    |               +--Field{name=id, schema=INT32}
-                    |               +--Field{name=ts, schema=INT32}
-                    |               +--Field{name=more1, schema={t_avro:STRUCT}}
-                    |                            |
-                    |                           +--Field{name=more1, schema={t_avro:STRUCT}}
-                    |                                        |
-                    |                                       +--Field{name=m1, schema=INT32}
-                    |                                       +--Field{name=m2, schema=INT32}
-                    |
-                    +--Field{name=other2, schema={t_avro:STRUCT}}
-                                |
-                                +--Field{name=n1, schema=INT32}
-                                +--Field{name=n2, schema=INT32}
-                                +--Field{name=more2, schema={t_avro:STRUCT}}
-                                            |
-                                            +--Field{name=m3, schema=INT32}
-                                            +--Field{name=m4, schema=INT32}
-    we want to the struct of schemaC be like this.
-    schama{updated: " " , name: " " , age: " " ; id: " " , ts: " " , m1: " ", m2: " ", n1: " " , n2 : " ", m3: " "; m4: ""} 
-    */
+  public void fwcTestMultilevelExpend() {
     final Schema schemaInnerA1 = SchemaBuilder.struct()
     .field("m1", Schema.INT32_SCHEMA)
     .field("m2", Schema.INT32_SCHEMA)
@@ -458,7 +292,8 @@ public class BufferedRecordsTest {
     .put("after", valueC);
 
     final SinkRecord record = new SinkRecord("dummy", 0, null, null, schema, value, 0);
-    SinkRecord recordExpended = buffer.expand(record);
+    RecordHandler handler = new RecordHandler();
+    SinkRecord recordExpended = handler.expandValueSchema(record);
 
     final Schema schemaResult = SchemaBuilder.struct()
     .field("name", Schema.STRING_SCHEMA)
@@ -488,156 +323,53 @@ public class BufferedRecordsTest {
     final SinkRecord recordResult = new SinkRecord("dummy", 0, null, null, schemaResult, valueResult, 0);
     assert(recordResult.equals(recordExpended));
 
-    final SinkRecord recordRes = buffer.expand(recordResult);
+    final SinkRecord recordRes = handler.expandValueSchema(recordResult);
     assert(recordRes.equals(recordResult));
   }
 
   @Test
-    public void testSameFieldExpend() {
-        final HashMap<Object, Object> props = new HashMap<>();
-        props.put("connection.url", sqliteHelper.sqliteUri());
-        props.put("auto.create", true);
-        props.put("auto.evolve", true);
-        props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-        final JdbcSinkConfig config = new JdbcSinkConfig(props);
-    
-        final String url = sqliteHelper.sqliteUri();
-        final DatabaseDialect dbDialect = DatabaseDialects.findBestFor(url, config);
-        final DbStructure dbStructure = new DbStructure(dbDialect);
-    
-        final TableId tableId = new TableId(null, null, "dummy");
-        final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, sqliteHelper.connection);
-    
-        /*
-        the struct of schemaC is like this.
-        schema ++++++++ updated
-                        +
-                        after ++++++++ name
-                                        +
-                                        age
-                                        +
-                                        other1 ++++++++ id
-                                        +               +
-                                        +               ts
-                                        +
-                                        other2 ++++++++ id
-                                                        +
-                                                        ts
-        we want to the struct of schemaC be like this.
-        schama{updated: " " , name: " " , age: " " ; id: " " , ts: " " , n1: " " , n2 : " " } 
-        */
-        final Schema schemaInner2 = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .build();
-    
-        final Schema schemaInner3 = SchemaBuilder.struct()
-        .field("id",Schema.INT32_SCHEMA)
-        .field("ts",Schema.INT32_SCHEMA)
-        .build();
-    
-        final Schema schemaInner1 = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("other1", schemaInner2)
-        .field("other2", schemaInner3)
-        .build();
-    
-        final Schema schema = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", schemaInner1)
-        .build();
-    
-        final Struct value2 = new Struct(schemaInner2)
-        .put("id", 1)
-        .put("ts", 2);
-    
-        final Struct value3 = new Struct(schemaInner3)
-        .put("id", 3)
-        .put("ts", 4);
-    
-        final Struct value1 = new Struct(schemaInner1)
-        .put("name", "he")
-        .put("age", 23)
-        .put("other1", value2)
-        .put("other2", value3);
-    
-        final Struct value = new Struct(schema)
-        .put("updated", "123")
-        .put("after", value1);
-    
-        final SinkRecord record = new SinkRecord("dummy", 0, null, null, schema, value, 0);
-        thrown.expect(SchemaBuilderException.class);
-        thrown.expectMessage("Cannot create field because of field name duplication id");
-        SinkRecord recordExpended = buffer.expand(record);
-
-        /*
-        the struct of schemaC is like this.
-        schema ++++++++ updated
-                        +
-                        after ++++++++ name
-                                        +
-                                        age
-                                        +
-                                        other1 ++++++++ id
-                                        +               +
-                                        +               age
-                                        +
-                                        other2 ++++++++ n1
-                                                        +
-                                                        n2
-        we want to the struct of schemaC be like this.
-        schama{updated: " " , name: " " , age: " " ; id: " " , ts: " " , n1: " " , n2 : " " } 
-        */
-
-        final Schema schemaInnerB2 = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .build();
-    
-        final Schema schemaInnerB3 = SchemaBuilder.struct()
-        .field("n1",Schema.INT32_SCHEMA)
-        .field("n2",Schema.INT32_SCHEMA)
-        .build();
-    
-        final Schema schemaInnerB1 = SchemaBuilder.struct()
-        .field("name", Schema.STRING_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("other1", schemaInnerB2)
-        .field("other2", schemaInnerB3)
-        .build();
-    
-        final Schema schemaB = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", schemaInnerB1)
-        .build();
-    
-        final Struct valueB2 = new Struct(schemaInnerB2)
-        .put("id", 1)
-        .put("age", 2);
-    
-        final Struct valueB3 = new Struct(schemaInnerB3)
-        .put("n1", 3)
-        .put("n2", 4);
-    
-        final Struct valueB1 = new Struct(schemaInnerB1)
-        .put("name", "he")
-        .put("age", 23)
-        .put("other1", valueB2)
-        .put("other2", valueB3);
-    
-        final Struct valueB = new Struct(schemaB)
-        .put("updated", "123")
-        .put("after", valueB1);
-    
-        final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-        thrown.expect(SchemaBuilderException.class);
-        thrown.expectMessage("Cannot create field because of field name duplication age");
-        SinkRecord recordBExpended = buffer.expand(recordB);
-      }
+  public void fwcTestSameFieldExpend() {
+    final Schema schemaInnerB2 = SchemaBuilder.struct()
+    .field("id", Schema.INT32_SCHEMA)
+    .field("age", Schema.INT32_SCHEMA)
+    .build();
+     final Schema schemaInnerB3 = SchemaBuilder.struct()
+    .field("n1",Schema.INT32_SCHEMA)
+    .field("n2",Schema.INT32_SCHEMA)
+    .build();
+     final Schema schemaInnerB1 = SchemaBuilder.struct()
+    .field("name", Schema.STRING_SCHEMA)
+    .field("age", Schema.INT32_SCHEMA)
+    .field("other1", schemaInnerB2)
+    .field("other2", schemaInnerB3)
+    .build();
+     final Schema schemaB = SchemaBuilder.struct()
+    .field("updated", Schema.STRING_SCHEMA)
+    .field("after", schemaInnerB1)
+    .build();
+     final Struct valueB2 = new Struct(schemaInnerB2)
+    .put("id", 1)
+    .put("age", 2);
+     final Struct valueB3 = new Struct(schemaInnerB3)
+    .put("n1", 3)
+    .put("n2", 4);
+     final Struct valueB1 = new Struct(schemaInnerB1)
+    .put("name", "he")
+    .put("age", 23)
+    .put("other1", valueB2)
+    .put("other2", valueB3);
+     final Struct valueB = new Struct(schemaB)
+    .put("updated", "123")
+    .put("after", valueB1);
+     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
+    thrown.expect(SchemaBuilderException.class);
+    thrown.expectMessage("Cannot create field because of field name duplication age");
+    RecordHandler  handler = new RecordHandler();
+    handler.expandValueSchema(recordB);
+  }
 
   @Test
-  public void testGPUpsertThenDelete() throws SQLException {
+  public void fwcTestGPUpsertThenDelete() throws SQLException {
     final HashMap<Object, Object> props = new HashMap<>();
     props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
     props.put("auto.create", false);

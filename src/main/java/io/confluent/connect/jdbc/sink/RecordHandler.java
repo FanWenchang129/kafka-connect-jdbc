@@ -78,6 +78,10 @@ public class RecordHandler {
     return RecordType.OTHER;
   }
 
+  public SinkRecord expandValueSchema(SinkRecord record) {
+    return expand(record);
+  } 
+
   // Transform the value-schema and expand the nested STRUCT structure
   // on the top layer, for example:
   // Before:
@@ -98,48 +102,70 @@ public class RecordHandler {
   // +--Field {name=ts, schema=INT64}
   // +--Field {name=age, schema=INT64}
   // +--Field {name=name, schema=STRING}
-  public SinkRecord expandValueSchema(SinkRecord record) {
+  private SinkRecord expand(SinkRecord record) {
     // This record is not sent by DRDB
     Schema orgiValueSchema = record.valueSchema();
     if (isNull(orgiValueSchema)) {
       return record;
     }
-    Field updatedField = orgiValueSchema.field("updated");
+
     Field afterField = orgiValueSchema.field("after");
-    if (isNull(updatedField) || isNull(afterField)) {
+
+    if (isNull(afterField)) {
       return record;
     }
 
     SchemaBuilder schemaBuilder = SchemaBuilder.struct();
-    for (Field field : afterField.schema().fields()) {
-      schemaBuilder.field(field.name(), field.schema());
-    }
+
+    schemaBuilder = schemaDelayer(afterField, schemaBuilder);
+    
     final Schema valueSchema = schemaBuilder.build();
 
     Struct valueStruct = (Struct) record.value();
     if (isNull(valueStruct)) {
       return record;
     }
-
-    Struct afterValueStruct = (Struct) valueStruct.get(afterField);
+  
+    Struct afterValueStruct = (Struct)valueStruct.get(afterField);
     if (isNull(afterValueStruct)) {
-      // delete record
-      return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(), 
-                                record.key(), null,null, record.timestamp(), record.headers());
+      //delete record
+      return record.newRecord(record.topic(), record.kafkaPartition(), 
+                              record.keySchema() , record.key(), 
+                              null,null, 
+                              record.timestamp(), record.headers());
     } else {
       Struct value = new Struct(valueSchema);
-      // value.put(updatedField.name(), valueStruct.get(updatedField));
-      for (Field field : afterField.schema().fields()) {
-        value.put(field.name(), afterValueStruct.get(field));
-      }
-      // upsert record
-      return record.newRecord(record.topic(), record.kafkaPartition(), record.keySchema(),
-                            record.key(),valueSchema, value, record.timestamp(), record.headers());
+
+      value = valueDelayer(value, afterField, afterValueStruct);
+
+      //upsert record
+      return record.newRecord(record.topic(), record.kafkaPartition(), 
+                              record.keySchema() , record.key(), 
+                              valueSchema, value, 
+                              record.timestamp(), record.headers());
     }
   }
-  /*
-   * public boolean isValid(SinkRecord Record) {
-   * 
-   * }
-   */
+
+  private SchemaBuilder schemaDelayer(Field fields, SchemaBuilder schemaBuilder) {
+    for (Field field : fields.schema().fields()) {
+      if (field.schema().type().equals(Schema.Type.STRUCT)) {
+        schemaBuilder = schemaDelayer(field, schemaBuilder);
+      } else {
+        schemaBuilder.field(field.name(), field.schema());
+      }
+    }
+    return schemaBuilder;
+  }
+
+  private Struct valueDelayer(Struct value, Field afterField, Struct afterValueStruct) {
+    for (Field field : afterField.schema().fields()) {
+      if (field.schema().type().equals(Schema.Type.STRUCT)) {
+        Struct vs = (Struct)afterValueStruct.get(field);
+        value = valueDelayer(value, field, vs);
+      } else {
+        value.put(field.name(), afterValueStruct.get(field));
+      }
+    }
+    return value;
+  }
 }

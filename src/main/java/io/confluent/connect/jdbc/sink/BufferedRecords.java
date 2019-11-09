@@ -17,8 +17,6 @@ package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.errors.ConnectException;
-import org.apache.kafka.connect.errors.DataException;
-import org.apache.kafka.connect.errors.SchemaBuilderException;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,8 +43,6 @@ import static io.confluent.connect.jdbc.sink.JdbcSinkConfig.InsertMode.INSERT;
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 
-import java.lang.ProcessBuilder.Redirect.Type;
-import java.nio.file.Files;
 
 public class BufferedRecords {
   private static final Logger log = LoggerFactory.getLogger(BufferedRecords.class);
@@ -85,7 +81,7 @@ public class BufferedRecords {
     final List<SinkRecord> flushed = new ArrayList<>();
      
     boolean schemaChanged = false;
-	  if (!Objects.equals(keySchema, record.keySchema())) {
+    if (!Objects.equals(keySchema, record.keySchema())) {
       keySchema = record.keySchema();
       schemaChanged = true;
     }

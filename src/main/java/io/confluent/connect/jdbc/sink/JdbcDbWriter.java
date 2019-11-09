@@ -73,7 +73,6 @@ public class JdbcDbWriter {
         continue;
       }
       if (recordType == RecordType.CDC) {
-
         record = recordHandler.expandValueSchema(record);
       }
       buffer.add(record);
