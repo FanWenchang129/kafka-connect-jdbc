@@ -16,7 +16,6 @@
 package io.confluent.connect.jdbc.sink;
 
 import org.apache.kafka.common.config.ConfigException;
-import org.apache.kafka.common.errors.OutOfOrderSequenceException;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -64,392 +63,6 @@ public class BufferedRecordsTest {
   @After
   public void tearDown() throws IOException, SQLException {
     sqliteHelper.tearDown();
-  }
-  
- 
-  @Rule
-  public ExpectedException thrown = ExpectedException.none();
-
-  @Test
-  public void fwcTestSameNameSchema() throws SQLException{
-    final Schema schemaB = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", Schema.STRING_SCHEMA)
-        .build();
-    final Struct valueB = new Struct(schemaB)
-        .put("id",1)
-        .put("age",26)
-        .put("updated","333")
-        .put("after","afterValue");
-    final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-    RecordType recordType = recordHandler.getRecordType(recordB);
-        assert (recordType.equals(RecordType.OTHER));
-  }
-
-  @Test
-  public void fwcTestVoidExpend() {
-    final Schema schemaInner = SchemaBuilder.struct()
-      .field("id", Schema.INT32_SCHEMA)
-      .field("ts", Schema.INT32_SCHEMA)
-      .field("age",Schema.INT32_SCHEMA)
-      .field("name", Schema.STRING_SCHEMA)
-      .build();
-
-    final Schema schemaA = SchemaBuilder.struct()
-      .field("updated", Schema.STRING_SCHEMA)
-      .field("after", schemaInner)
-      .build();
-
-    thrown.expect(DataException.class);
-    thrown.expectMessage("Invalid value: null used for required field: \"age\", schema type: INT32");
-
-    final Struct valueInner = new Struct(schemaInner)
-      .put("id", 1)
-      .put("ts", 100)
-      .put("age", null)
-      .put("name", "nick");
-
-    thrown.expect(DataException.class);
-    thrown.expectMessage("Invalid value: null used for required field: \"age\", schema type: INT32");
-    
-    final Struct valueA = new Struct(schemaA)
-      .put("updated", "123")
-      .put("after", valueInner);
-    
-    final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    RecordHandler handler = new RecordHandler();
-    handler.expandValueSchema(recordA);
-  } 
-
-  
-  @Test
-  public void fwcTestEmptyAfterExpend() {
-    final Schema schemaA = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", Schema.STRING_SCHEMA)
-        .build();
-
-    final Struct valueA = new Struct(schemaA)
-        .put("updated", "")
-        .put("after", "");
-
-    final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
-    RecordHandler handler = new RecordHandler();
-
-    thrown.expect(DataException.class);
-    thrown.expectMessage("Cannot list fields on non-struct type");
-    handler.expandValueSchema(recordA);
-  }
-
-  @Test
-  public void fwcTestSchemaInconsistentWithValue() {
-    final Schema schemaA = SchemaBuilder.struct()
-        .field("updated", Schema.STRING_SCHEMA)
-        .field("after", Schema.BOOLEAN_SCHEMA)
-        .build();
-
-    thrown.expect(DataException.class);
-    thrown.expectMessage("Invalid Java object for schema type STRING: class java.lang.Boolean for field: \"updated\"");
-    final Struct valueA = new Struct(schemaA)
-        .put("updated", true)
-        .put("after", "123");
-  }
-
-  @Test
-  public void fwcTestExpend() {
-    final Schema schemaInner2 = SchemaBuilder.struct()
-    .field("id", Schema.INT32_SCHEMA)
-    .field("ts", Schema.INT32_SCHEMA)
-    .build();
-
-    final Schema schemaInner3 = SchemaBuilder.struct()
-    .field("n1",Schema.INT32_SCHEMA)
-    .field("n2",Schema.INT32_SCHEMA)
-    .build();
-
-    final Schema schemaInner1 = SchemaBuilder.struct()
-    .field("name", Schema.STRING_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .field("other1", schemaInner2)
-    .field("other2", schemaInner3)
-    .build();
-
-    final Schema schema = SchemaBuilder.struct()
-    .field("updated", Schema.STRING_SCHEMA)
-    .field("after", schemaInner1)
-    .build();
-
-    final Struct value2 = new Struct(schemaInner2)
-    .put("id", 1)
-    .put("ts", 2);
-
-    final Struct value3 = new Struct(schemaInner3)
-    .put("n1", 3)
-    .put("n2", 4);
-
-    final Struct value1 = new Struct(schemaInner1)
-    .put("name", "he")
-    .put("age", 23)
-    .put("other1", value2)
-    .put("other2", value3);
-
-    final Struct value = new Struct(schema)
-    .put("updated", "123")
-    .put("after", value1);
-
-    final SinkRecord record = new SinkRecord("dummy", 0, null, null, schema, value, 0);
-    RecordHandler handler = new RecordHandler();
-    SinkRecord recordExpended = handler.expandValueSchema(record);
-
-    final Schema schemaResult = SchemaBuilder.struct()
-    .field("name", Schema.STRING_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .field("id", Schema.INT32_SCHEMA)
-    .field("ts", Schema.INT32_SCHEMA)
-    .field("n1", Schema.INT32_SCHEMA)
-    .field("n2", Schema.INT32_SCHEMA)
-    .build();
-
-    final Struct valueResult = new Struct(schemaResult)
-    .put("name", "he")
-    .put("age", 23)
-    .put("id", 1)
-    .put("ts", 2)
-    .put("n1", 3)
-    .put("n2", 4);
-
-    final SinkRecord recordResult = new SinkRecord("dummy", 0, null, null, schemaResult, valueResult, 0);
-    assert(recordResult.equals(recordExpended));
-
-    SinkRecord recordRes = handler.expandValueSchema(recordResult);
-    assert(recordRes.equals(recordResult));
-  }
-
-  @Test
-  public void fwcTestMultilevelExpend() {
-    final Schema schemaInnerA1 = SchemaBuilder.struct()
-    .field("m1", Schema.INT32_SCHEMA)
-    .field("m2", Schema.INT32_SCHEMA)
-    .build();
-
-    final Schema schemaInnerA2 = SchemaBuilder.struct()
-    .field("m3", Schema.INT32_SCHEMA)
-    .field("m4", Schema.INT32_SCHEMA)
-    .build();
-
-    final Schema schemaInnerB1 = SchemaBuilder.struct()
-    .field("id", Schema.INT32_SCHEMA)
-    .field("ts", Schema.INT32_SCHEMA)
-    .field("more1", schemaInnerA1)
-    .build();
-
-    final Schema schemaInnerB2 = SchemaBuilder.struct()
-    .field("n1",Schema.INT32_SCHEMA)
-    .field("n2",Schema.INT32_SCHEMA)
-    .field("more2", schemaInnerA2)
-    .build();
-
-    final Schema schemaInnerC = SchemaBuilder.struct()
-    .field("name", Schema.STRING_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .field("other1", schemaInnerB1)
-    .field("other2", schemaInnerB2)
-    .build();
-
-    final Schema schema = SchemaBuilder.struct()
-    .field("updated", Schema.STRING_SCHEMA)
-    .field("after", schemaInnerC)
-    .build();
-
-    final Struct valueA1 = new Struct(schemaInnerA1)
-    .put("m1", 1)
-    .put("m2", 2);
-
-    final Struct valueA2 = new Struct(schemaInnerA2)
-    .put("m3", 3)
-    .put("m4", 4);
-
-    final Struct valueB1 = new Struct(schemaInnerB1)
-    .put("id", 1)
-    .put("ts", 2)
-    .put("more1", valueA1);
-
-    final Struct valueB2 = new Struct(schemaInnerB2)
-    .put("n1", 3)
-    .put("n2", 4)
-    .put("more2", valueA2);
-
-    final Struct valueC = new Struct(schemaInnerC)
-    .put("name", "he")
-    .put("age", 23)
-    .put("other1", valueB1)
-    .put("other2", valueB2);
-
-    final Struct value = new Struct(schema)
-    .put("updated", "123")
-    .put("after", valueC);
-
-    final SinkRecord record = new SinkRecord("dummy", 0, null, null, schema, value, 0);
-    RecordHandler handler = new RecordHandler();
-    SinkRecord recordExpended = handler.expandValueSchema(record);
-
-    final Schema schemaResult = SchemaBuilder.struct()
-    .field("name", Schema.STRING_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .field("id", Schema.INT32_SCHEMA)
-    .field("ts", Schema.INT32_SCHEMA)
-    .field("m1", Schema.INT32_SCHEMA)
-    .field("m2", Schema.INT32_SCHEMA)
-    .field("n1", Schema.INT32_SCHEMA)
-    .field("n2", Schema.INT32_SCHEMA)
-    .field("m3", Schema.INT32_SCHEMA)
-    .field("m4", Schema.INT32_SCHEMA)
-    .build();
-
-    final Struct valueResult = new Struct(schemaResult)
-    .put("name", "he")
-    .put("age", 23)
-    .put("id", 1)
-    .put("ts", 2)
-    .put("m1", 1)
-    .put("m2", 2)
-    .put("n1", 3)
-    .put("n2", 4)
-    .put("m3", 3)
-    .put("m4", 4);
-
-    final SinkRecord recordResult = new SinkRecord("dummy", 0, null, null, schemaResult, valueResult, 0);
-    assert(recordResult.equals(recordExpended));
-
-    final SinkRecord recordRes = handler.expandValueSchema(recordResult);
-    assert(recordRes.equals(recordResult));
-  }
-
-  @Test
-  public void fwcTestSameFieldExpend() {
-    final Schema schemaInnerB2 = SchemaBuilder.struct()
-    .field("id", Schema.INT32_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .build();
-     final Schema schemaInnerB3 = SchemaBuilder.struct()
-    .field("n1",Schema.INT32_SCHEMA)
-    .field("n2",Schema.INT32_SCHEMA)
-    .build();
-     final Schema schemaInnerB1 = SchemaBuilder.struct()
-    .field("name", Schema.STRING_SCHEMA)
-    .field("age", Schema.INT32_SCHEMA)
-    .field("other1", schemaInnerB2)
-    .field("other2", schemaInnerB3)
-    .build();
-     final Schema schemaB = SchemaBuilder.struct()
-    .field("updated", Schema.STRING_SCHEMA)
-    .field("after", schemaInnerB1)
-    .build();
-     final Struct valueB2 = new Struct(schemaInnerB2)
-    .put("id", 1)
-    .put("age", 2);
-     final Struct valueB3 = new Struct(schemaInnerB3)
-    .put("n1", 3)
-    .put("n2", 4);
-     final Struct valueB1 = new Struct(schemaInnerB1)
-    .put("name", "he")
-    .put("age", 23)
-    .put("other1", valueB2)
-    .put("other2", valueB3);
-     final Struct valueB = new Struct(schemaB)
-    .put("updated", "123")
-    .put("after", valueB1);
-     final SinkRecord recordB = new SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
-    thrown.expect(SchemaBuilderException.class);
-    thrown.expectMessage("Cannot create field because of field name duplication age");
-    RecordHandler  handler = new RecordHandler();
-    handler.expandValueSchema(recordB);
-  }
-
-  @Test
-  public void fwcTestGPUpsertThenDelete() throws SQLException {
-    final HashMap<Object, Object> props = new HashMap<>();
-    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
-    props.put("auto.create", false);
-    //props.put("auto.evolve", true);
-    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
-    props.put("insert.mode", "upsert"); 
-    props.put("delete.enabled", true); 
-    props.put("pk.mode", "record_key"); 
-    props.put("pk.fields", "id"); 
-    final JdbcSinkConfig config = new JdbcSinkConfig(props);
-
-    //final String url ="jdbc:postgresql://localhost/postgres?user=postgres&password=postgres";
-    final DatabaseDialect dbDialect = new GreenplumDatabaseDialect(config);
-    final DbStructure dbStructure = new DbStructure(dbDialect);
-
-    final TableId tableId = new TableId(null, null, "t_avro");
-
-    final CachedConnectionProvider cachedConnectionProvider = new CachedConnectionProvider(dbDialect);
-    final Connection connection = cachedConnectionProvider.getConnection();
-    if (connection.getAutoCommit()){
-        connection.setAutoCommit(false);
-    }
-
-    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
-
-    final Schema keySchema = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .build();
-
-    final Struct key = new Struct(keySchema)
-        .put("id", 1);
-
-    final Schema valueSchema = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
-
-    final Struct value = new Struct(valueSchema)
-        .put("id", 1)
-        .put("ts", 1562868)
-        .put("age", 23)
-        .put("name", "Frank");
-
-    final SinkRecord record = new SinkRecord(tableId.tableName(), 0, keySchema, key, valueSchema, value, 0);
-    final SinkRecord recordDelete = new SinkRecord(tableId.tableName(), 0, keySchema, key, null, null, 2);
-
-    final Schema keySchemaB = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .build();
-
-    final Struct keyB = new Struct(keySchemaB)
-        .put("id", 2);
-
-    final Schema valueSchemaB = SchemaBuilder.struct()
-        .field("id", Schema.INT32_SCHEMA)
-        .field("ts", Schema.INT32_SCHEMA)
-        .field("age", Schema.INT32_SCHEMA)
-        .field("name", Schema.STRING_SCHEMA)
-        .build();
-
-    final Struct valueB = new Struct(valueSchemaB)
-        .put("id", 2)
-        .put("ts", 100)
-        .put("age", 20)
-        .put("name", "nick");
-    final SinkRecord recordB = new SinkRecord(tableId.tableName(), 0, keySchemaB, keyB, valueSchemaB, valueB, 1);
-
-    try {
-        assertEquals(Collections.emptyList(), buffer.add(record));
-        assertEquals(Collections.emptyList(), buffer.add(recordB));
-        assertEquals(Collections.emptyList(), buffer.add(recordDelete));
-        assertEquals(Arrays.asList(record, recordB, recordDelete), buffer.flush());
-        //assertEquals(Arrays.asList(record, recordB), buffer.flush());
-    } catch (SQLException sqle) {
-        System.out.println(sqle.getMessage());
-    }
-        connection.commit();
-        cachedConnectionProvider.close();
   }
 
   @Test
@@ -763,5 +376,89 @@ public class BufferedRecordsTest {
 
     Mockito.verify(connectionMock, Mockito.times(1)).prepareStatement(Matchers.eq("UPDATE `dummy` SET `name` = ?"));
 
+  }
+
+  @Test
+  public void testUpsertThenDeleteToGP() throws SQLException {
+    final HashMap<Object, Object> props = new HashMap<>();
+    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("auto.create", false);
+    //props.put("auto.evolve", true);
+    props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
+    props.put("insert.mode", "upsert"); 
+    props.put("delete.enabled", true); 
+    props.put("pk.mode", "record_key"); 
+    props.put("pk.fields", "id"); 
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+
+    //final String url ="jdbc:postgresql://localhost/postgres?user=postgres&password=postgres";
+    final DatabaseDialect dbDialect = new GreenplumDatabaseDialect(config);
+    final DbStructure dbStructure = new DbStructure(dbDialect);
+
+    final TableId tableId = new TableId(null, null, "t_avro");
+
+    final CachedConnectionProvider cachedConnectionProvider = new CachedConnectionProvider(dbDialect);
+    final Connection connection = cachedConnectionProvider.getConnection();
+    if (connection.getAutoCommit()){
+        connection.setAutoCommit(false);
+    }
+
+    final BufferedRecords buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
+
+    final Schema keySchema = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .build();
+
+    final Struct key = new Struct(keySchema)
+        .put("id", 1);
+
+    final Schema valueSchema = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .field("ts", Schema.INT32_SCHEMA)
+        .field("age", Schema.INT32_SCHEMA)
+        .field("name", Schema.STRING_SCHEMA)
+        .build();
+
+    final Struct value = new Struct(valueSchema)
+        .put("id", 1)
+        .put("ts", 1562868)
+        .put("age", 23)
+        .put("name", "Frank");
+
+    final SinkRecord record = new SinkRecord(tableId.tableName(), 0, keySchema, key, valueSchema, value, 0);
+    final SinkRecord recordDelete = new SinkRecord(tableId.tableName(), 0, keySchema, key, null, null, 2);
+
+    final Schema keySchemaB = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .build();
+
+    final Struct keyB = new Struct(keySchemaB)
+        .put("id", 2);
+
+    final Schema valueSchemaB = SchemaBuilder.struct()
+        .field("id", Schema.INT32_SCHEMA)
+        .field("ts", Schema.INT32_SCHEMA)
+        .field("age", Schema.INT32_SCHEMA)
+        .field("name", Schema.STRING_SCHEMA)
+        .build();
+
+    final Struct valueB = new Struct(valueSchemaB)
+        .put("id", 2)
+        .put("ts", 100)
+        .put("age", 20)
+        .put("name", "nick");
+    final SinkRecord recordB = new SinkRecord(tableId.tableName(), 0, keySchemaB, keyB, valueSchemaB, valueB, 1);
+
+    try {
+        assertEquals(Collections.emptyList(), buffer.add(record));
+        assertEquals(Collections.emptyList(), buffer.add(recordB));
+        assertEquals(Collections.emptyList(), buffer.add(recordDelete));
+        assertEquals(Arrays.asList(record, recordB, recordDelete), buffer.flush());
+        //assertEquals(Arrays.asList(record, recordB), buffer.flush());
+    } catch (SQLException sqle) {
+        System.out.println(sqle.getMessage());
+    }
+        connection.commit();
+        cachedConnectionProvider.close();
   }
 }

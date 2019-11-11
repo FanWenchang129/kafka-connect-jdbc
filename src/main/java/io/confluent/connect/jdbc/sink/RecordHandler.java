@@ -16,7 +16,11 @@
 package io.confluent.connect.jdbc.sink;
 
 import java.util.List;
+import java.util.Map;
+
 import static java.util.Objects.isNull;
+
+import java.util.HashMap;
 
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -27,8 +31,21 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import io.confluent.connect.jdbc.sink.metadata.RecordType;
 
 public class RecordHandler {
+  protected boolean utFlag = false;
 
-  public void updateResolvedTime(SinkRecord record) {
+  public void handle(SinkRecord record) {
+    RecordType type = getRecordType(record);
+    if (type == RecordType.RESOLVED) {
+      updateResolvedTime(record);
+      record = null;
+    } else if (type == RecordType.CDC) {
+      record = expandValueSchema(record);
+    } else { 
+      // do nothing
+    }
+  }
+
+  protected void updateResolvedTime(SinkRecord record) {
     Schema origValueSchema = record.valueSchema();
     Field resolvedField = origValueSchema.field("resolved");
     Struct valueStruct = (Struct) record.value();
@@ -42,26 +59,72 @@ public class RecordHandler {
     timeCache.updateTime(resolved);
   }
 
-  public RecordType getRecordType(SinkRecord record) {
+  protected boolean maybeCdcRecord(SinkRecord record) {
+    boolean maybeCdc = false;
+    Schema orgiValueSchema = record.valueSchema();
+    if (!isNull(orgiValueSchema)) {
+      String valueSchemaName = orgiValueSchema.name();
+      if (!isNull(valueSchemaName) ) {
+        if (valueSchemaName.equals(record.topic()+ "_envelope")){
+          maybeCdc = true;
+        }
+      }
+    }
+    if (utFlag) {
+      maybeCdc = true;
+    }
+    return maybeCdc;
+  }
+
+  protected RecordType getRecordType(SinkRecord record) {
+    RecordType type = RecordType.OTHER;
+    if (maybeCdcRecord(record)) {
+      List<Field> fields = record.valueSchema().fields();
+      Map<String, Field> fmap = new HashMap<String, Field>(); 
+      for( Field field : fields) {
+        fmap.put(field.name(), field);
+      }
+      Field updatedField  = fmap.containsKey("updated" )? fmap.get("updated") :null;
+      Field afterField    = fmap.containsKey("after"   )? fmap.get("after")   :null;
+      Field resolvedField = fmap.containsKey("resolved")? fmap.get("resolved"):null;
+
+      if (updatedField !=null && afterField != null && 
+          updatedField.schema().type() == Schema.Type.STRING &&
+          afterField.schema().type() == Schema.Type.STRUCT) {
+        type = RecordType.CDC;
+      }
+      if (resolvedField !=null && 
+        resolvedField.schema().type() == Schema.Type.STRING) {
+        type = RecordType.RESOLVED;
+      }
+    }
+    return type;
+  }
+
+  protected RecordType getRecordType2(SinkRecord record) {
     Schema orgiValueSchema = record.valueSchema();
     if (isNull(orgiValueSchema)) {
       return RecordType.OTHER;
     }
     String valueSchemaName = orgiValueSchema.name();
-    //System.out.println("valueSchemaName是:" + valueSchemaName);
-    if (isNull(valueSchemaName)) {
+    if (isNull(valueSchemaName) && !utFlag) {
       return RecordType.OTHER;
     }
 
     String topicName = record.topic();
-    if (valueSchemaName.equals(topicName + "_envelope")) {
-      Field updatedField = orgiValueSchema.field("updated");
-      Field afterField = orgiValueSchema.field("after");
-      Field resolvedField = orgiValueSchema.field("resolved");
+    if (valueSchemaName == (topicName + "_envelope") || utFlag) {
+      List<Field> fields = orgiValueSchema.fields();
+      Map<String, Field> fmap = new HashMap<String, Field>(); 
+      for( Field field : fields) {
+        fmap.put(field.name(), field);
+      }
+
+      Field updatedField = fmap.containsKey("updated")? fmap.get("updated"):null;
+      Field afterField = fmap.containsKey("after")? fmap.get("after"):null;
+      Field resolvedField = fmap.containsKey("resolved")? fmap.get("resolved"):null;
 
       if (!isNull(resolvedField)) {
         List<Field> fieldsList = orgiValueSchema.fields();
-        //System.out.printf("resolved逻辑，fieldList.size()=%d \n", fieldsList.size());
         if (fieldsList.size() == 1) {
           return RecordType.RESOLVED;
         } else {
@@ -78,7 +141,7 @@ public class RecordHandler {
     return RecordType.OTHER;
   }
 
-  public SinkRecord expandValueSchema(SinkRecord record) {
+  protected SinkRecord expandValueSchema(SinkRecord record) {
     return expand(record);
   } 
 
@@ -102,7 +165,7 @@ public class RecordHandler {
   // +--Field {name=ts, schema=INT64}
   // +--Field {name=age, schema=INT64}
   // +--Field {name=name, schema=STRING}
-  private SinkRecord expand(SinkRecord record) {
+  protected SinkRecord expand(SinkRecord record) {
     // This record is not sent by DRDB
     Schema orgiValueSchema = record.valueSchema();
     if (isNull(orgiValueSchema)) {
@@ -146,7 +209,7 @@ public class RecordHandler {
     }
   }
 
-  private SchemaBuilder schemaDelayer(Field fields, SchemaBuilder schemaBuilder) {
+  protected SchemaBuilder schemaDelayer(Field fields, SchemaBuilder schemaBuilder) {
     for (Field field : fields.schema().fields()) {
       if (field.schema().type().equals(Schema.Type.STRUCT)) {
         schemaBuilder = schemaDelayer(field, schemaBuilder);
@@ -157,7 +220,7 @@ public class RecordHandler {
     return schemaBuilder;
   }
 
-  private Struct valueDelayer(Struct value, Field afterField, Struct afterValueStruct) {
+  protected Struct valueDelayer(Struct value, Field afterField, Struct afterValueStruct) {
     for (Field field : afterField.schema().fields()) {
       if (field.schema().type().equals(Schema.Type.STRUCT)) {
         Struct vs = (Struct)afterValueStruct.get(field);
