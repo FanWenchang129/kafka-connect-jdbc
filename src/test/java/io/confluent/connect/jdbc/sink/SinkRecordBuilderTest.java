@@ -33,6 +33,7 @@ public class SinkRecordBuilderTest {
 
     SinkRecord record = CdcRecordBuilder.upsert(schema)
       .pk("id", 1)
+      .updated("1532377312562986715.0000000000")
       .col("id", 1)
       .col("name", "nick")
       .col("age", 12)
@@ -55,7 +56,7 @@ public class SinkRecordBuilderTest {
       .put("age", 12);
       
     final Struct value =  new Struct(valueSchema)
-      .put("updated", "unspecified")
+      .put("updated", "1532377312562986715.0000000000")
       .put("after", valueAfter);
 
     final Schema keySchema = SchemaBuilder.struct()

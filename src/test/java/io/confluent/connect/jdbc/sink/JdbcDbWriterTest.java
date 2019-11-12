@@ -32,8 +32,10 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -42,6 +44,7 @@ import io.confluent.connect.jdbc.dialect.GreenplumDatabaseDialect;
 import io.confluent.connect.jdbc.dialect.SqliteDatabaseDialect;
 import io.confluent.connect.jdbc.util.TableDefinition;
 import io.confluent.connect.jdbc.util.TableId;
+import net.bytebuddy.build.Plugin.Engine.Target.Sink;
 
 import static junit.framework.TestCase.assertTrue;
 import static org.junit.Assert.*;
@@ -49,6 +52,7 @@ import static org.junit.Assert.*;
 public class JdbcDbWriterTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
+  private final PostgreSqlHelper postgreSqlHelper = new PostgreSqlHelper("localhost","postgres","postgres","postgres");
 
   private JdbcDbWriter writer = null;
   private DatabaseDialect dialect;
@@ -56,6 +60,7 @@ public class JdbcDbWriterTest {
   @Before
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
+    postgreSqlHelper.setUp();
   }
 
   @After
@@ -63,6 +68,7 @@ public class JdbcDbWriterTest {
     if (writer != null)
       writer.closeQuietly();
     sqliteHelper.tearDown();
+    postgreSqlHelper.tearDown();
   }
 
   private JdbcDbWriter newWriter(Map<String, String> props) {
@@ -477,6 +483,242 @@ public class JdbcDbWriterTest {
               }
             }
         )
+    );
+  }
+
+  @Test
+  public void testCdc () throws Exception {
+
+    //make a set of cdc records
+    String topic = "t_avro";
+
+    final Schema upsertSchema= SchemaBuilder.struct()
+    .field("id", Schema.INT32_SCHEMA)
+    .field("ts", Schema.INT64_SCHEMA)
+    .field("age", Schema.INT32_SCHEMA)
+    .field("name", Schema.STRING_SCHEMA)
+    .build();
+
+    SinkRecord record_1 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 1)
+      .updated("1532377312562986715.0000000000")
+      .col("id", 1)
+      .col("ts", 1474661402123L)
+      .col("age", 23)
+      .col("name", "Frank1")
+      .build();
+
+    SinkRecord record_2 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 2)
+      .updated("1532377306108205142.0000000000")
+      .col("id", 2)
+      .col("ts", 1474661402124L)
+      .col("age", 32)
+      .col("name", "nick")
+      .build();
+
+    SinkRecord record_3 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 3)
+      .updated("1532377358501715562.0000000000")
+      .col("id", 3)
+      .col("ts", 1474661402125L)
+      .col("age", 29)
+      .col("name", "bob")
+      .build();
+
+    final Schema resolvedSchema= SchemaBuilder.struct()
+      .field("resolved", Schema.STRING_SCHEMA)
+      .build();
+  
+    SinkRecord record_4 = CdcRecordBuilder.resolved(topic, resolvedSchema)
+      .time("1532379889448662988.0000000000")
+      .build();
+    
+    SinkRecord record_5 = CdcRecordBuilder.upsert(topic, upsertSchema)
+    .pk("id", 4)
+    .updated("1532379923319195777.0000000000")
+    .col("id", 4)
+    .col("ts", 1474661402126L)
+    .col("age", 19)
+    .col("name", "tom")
+    .build();
+
+    List<SinkRecord> batch = new ArrayList<>();
+    batch.add(record_1);
+    batch.add(record_2);
+    batch.add(record_3);
+    batch.add(record_4);
+    batch.add(record_5);
+
+    postgreSqlHelper.deleteTable(topic);
+    postgreSqlHelper.createTable("create table "+topic+ "(id int primary key, ts timestamp, age int, name text)");
+
+    //create a jdbcwriter
+
+    final HashMap<String,String> props = new HashMap<>();
+    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("auto.create", "false");
+    //props.put("auto.evolve", true);
+    //props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
+    props.put("insert.mode", "upsert"); 
+    props.put("delete.enabled", "true"); 
+    props.put("pk.mode", "record_key"); 
+    props.put("pk.fields", "id"); 
+
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    dialect = new GreenplumDatabaseDialect(config);
+    final DbStructure dbStructure = new DbStructure(dialect);
+    writer = new JdbcDbWriter(config, dialect, dbStructure);
+
+    writer.write(batch);
+
+    List<SinkRecord> batchWithoutResolved = new ArrayList<>();
+    batchWithoutResolved.add(record_1);
+    batchWithoutResolved.add(record_2);
+    batchWithoutResolved.add(record_3);
+    batchWithoutResolved.add(record_5);
+
+    assertEquals(
+      batchWithoutResolved.size(),
+      postgreSqlHelper.select(
+          "SELECT * FROM " + topic + " order by id",
+          new PostgreSqlHelper.ResultSetReadCallback() {
+            @Override
+            public void read(ResultSet rs, int index) throws SQLException {
+              Struct value = (Struct)batchWithoutResolved.get(index).value();
+              Struct valueAfter = (Struct)value.get("after");
+              assertEquals((int)valueAfter.get("id"), rs.getInt("id"));
+              assertEquals("1970-01-18" , rs.getDate("ts").toString());
+              assertEquals((int)valueAfter.get("age"), rs.getInt("age"));
+              assertEquals((String)valueAfter.get("name"), rs.getString("name"));
+            }
+          }
+      )
+    );
+  }
+
+  @Test
+  public void testCdcWithDuplicateAndOutOfOrder () throws SQLException {
+    //make a set of cdc records
+    String topic = "t_avro";
+
+    final Schema upsertSchema= SchemaBuilder.struct()
+      .field("id", Schema.INT32_SCHEMA)
+      .field("ts", Schema.INT64_SCHEMA)
+      .field("age", Schema.INT32_SCHEMA)
+      .field("name", Schema.STRING_SCHEMA)
+      .build();
+
+    final Schema resolvedSchema= SchemaBuilder.struct()
+      .field("resolved", Schema.STRING_SCHEMA)
+      .build();
+
+    SinkRecord record_1 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 1)
+      .updated("1532377312562986715.0000000000")
+      .col("id", 1)
+      .col("ts", 1474661402123L)
+      .col("age", 23)
+      .col("name", "Frank1")
+      .build();
+  
+    SinkRecord record_2 = CdcRecordBuilder.resolved(topic, resolvedSchema)
+      .time("1532377306008205142.0000000000")
+      .build();
+
+    SinkRecord record_3 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 2)
+      .updated("1532377306108205142.0000000000")
+      .col("id", 2)
+      .col("ts", 1474661402124L)
+      .col("age", 32)
+      .col("name", "nick")
+      .build();
+
+    SinkRecord record_4 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 3)
+      .updated("1532377358501715562.0000000000")
+      .col("id", 3)
+      .col("ts", 1474661402125L)
+      .col("age", 29)
+      .col("name", "bob")
+      .build();
+
+    SinkRecord record_5 = CdcRecordBuilder.resolved(topic, resolvedSchema)
+      .time("1532379922512859361.0000000000")
+      .build();
+    
+    SinkRecord record_6 = CdcRecordBuilder.upsert(topic, upsertSchema)
+    .pk("id", 4)
+    .updated("1532379923319195777.0000000000")
+    .col("id", 4)
+    .col("ts", 1474661402126L)
+    .col("age", 19)
+    .col("name", "tom")
+    .build();
+
+    SinkRecord record_7 = CdcRecordBuilder.upsert(topic, upsertSchema)
+      .pk("id", 1)
+      .updated("1532377312562986715.0000000000")
+      .col("id", 1)
+      .col("ts", 1474661402123L)
+      .col("age", 23)
+      .col("name", "Frank1")
+      .build();
+
+    List<SinkRecord> batch = new ArrayList<>();
+    batch.add(record_1);
+    batch.add(record_2);
+    batch.add(record_3);
+    batch.add(record_4);
+    batch.add(record_5);
+    batch.add(record_6);
+    batch.add(record_7);
+
+    postgreSqlHelper.deleteTable(topic);
+    postgreSqlHelper.createTable("create table "+topic+ "(id int primary key, ts timestamp, age int, name text)");
+
+    //create a jdbcwriter
+
+    final HashMap<String,String> props = new HashMap<>();
+    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("auto.create", "false");
+    //props.put("auto.evolve", true);
+    //props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
+    props.put("insert.mode", "upsert"); 
+    props.put("delete.enabled", "true"); 
+    props.put("pk.mode", "record_key"); 
+    props.put("pk.fields", "id"); 
+
+    final JdbcSinkConfig config = new JdbcSinkConfig(props);
+    dialect = new GreenplumDatabaseDialect(config);
+    final DbStructure dbStructure = new DbStructure(dialect);
+    writer = new JdbcDbWriter(config, dialect, dbStructure);
+
+    writer.write(batch);
+
+    List<SinkRecord> batchWithoutResolved = new ArrayList<>();
+    batchWithoutResolved.add(record_1);
+    batchWithoutResolved.add(record_3);
+    batchWithoutResolved.add(record_4);
+    batchWithoutResolved.add(record_6);
+
+    assertEquals(
+      batchWithoutResolved.size(),
+      postgreSqlHelper.select(
+          "SELECT * FROM " + topic + " order by id",
+          new PostgreSqlHelper.ResultSetReadCallback() {
+            @Override
+            public void read(ResultSet rs, int index) throws SQLException {
+              Struct value = (Struct)batchWithoutResolved.get(index).value();
+              Struct valueAfter = (Struct)value.get("after");
+              assertEquals((int)valueAfter.get("id"), rs.getInt("id"));
+              assertEquals("1970-01-18" , rs.getDate("ts").toString());
+              assertEquals((int)valueAfter.get("age"), rs.getInt("age"));
+              assertEquals((String)valueAfter.get("name"), rs.getString("name"));
+            }
+          }
+      )
     );
   }
 

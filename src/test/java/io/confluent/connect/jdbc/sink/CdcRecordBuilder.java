@@ -99,6 +99,8 @@ class ResolvedRecordBuilder extends CdcRecordBuilder {
 
 class UpsertRecordBuilder  extends CdcRecordBuilder {
 
+  private String updatedTime = defaultTime;
+
   UpsertRecordBuilder(Schema valueSchemaAfter) {
     valueSchema = SchemaBuilder.struct()
       .field("updated", Schema.STRING_SCHEMA)
@@ -136,9 +138,14 @@ class UpsertRecordBuilder  extends CdcRecordBuilder {
       return this;
   }
 
+  public UpsertRecordBuilder  updated(String time) {
+    this.updatedTime = time;
+    return this;
+  }
+
   public SinkRecord build () {
       final Struct value = new Struct(valueSchema)
-      .put("updated", defaultTime)
+      .put("updated", updatedTime)
       .put("after", valueAfter);
 
       return new SinkRecord(topic,partition,

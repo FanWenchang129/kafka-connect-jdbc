@@ -31,18 +31,23 @@ import org.apache.kafka.connect.sink.SinkRecord;
 import io.confluent.connect.jdbc.sink.metadata.RecordType;
 
 public class RecordHandler {
-  protected boolean utFlag = false;
+  protected boolean checkValueSchemaName = true;
 
-  public void handle(SinkRecord record) {
+  public SinkRecord handle(SinkRecord record) {
+    SinkRecord newRecord = null;
     RecordType type = getRecordType(record);
     if (type == RecordType.RESOLVED) {
       updateResolvedTime(record);
-      record = null;
     } else if (type == RecordType.CDC) {
-      record = expandValueSchema(record);
+      newRecord = expandValueSchema(record);
     } else { 
-      // do nothing
+      newRecord = record;
     }
+    return newRecord;
+  }
+
+  public void CloseCheckValueSchemaName() {
+    this.checkValueSchemaName = false;
   }
 
   protected void updateResolvedTime(SinkRecord record) {
@@ -52,7 +57,16 @@ public class RecordHandler {
     String stringResolved = (String) valueStruct.get(resolvedField);
 
     int num = stringResolved.indexOf(".");
-    String interceptResolved = stringResolved.substring(0, num);
+
+    String interceptResolved = null;
+    if (num > 0) {
+      interceptResolved = stringResolved.substring(0, num);
+    } else if (num == -1) {
+      interceptResolved = stringResolved;
+    } else {
+      interceptResolved = "0";
+    }
+    
     Long resolved = Long.parseLong(interceptResolved);
 
     TimeCache timeCache = TimeCache.getTimeCacheInstance();
@@ -70,7 +84,7 @@ public class RecordHandler {
         }
       }
     }
-    if (utFlag) {
+    if (!checkValueSchemaName) {
       maybeCdc = true;
     }
     return maybeCdc;
@@ -107,12 +121,12 @@ public class RecordHandler {
       return RecordType.OTHER;
     }
     String valueSchemaName = orgiValueSchema.name();
-    if (isNull(valueSchemaName) && !utFlag) {
+    if (isNull(valueSchemaName) && !checkValueSchemaName) {
       return RecordType.OTHER;
     }
 
     String topicName = record.topic();
-    if (valueSchemaName == (topicName + "_envelope") || utFlag) {
+    if (valueSchemaName == (topicName + "_envelope") || checkValueSchemaName) {
       List<Field> fields = orgiValueSchema.fields();
       Map<String, Field> fmap = new HashMap<String, Field>(); 
       for( Field field : fields) {

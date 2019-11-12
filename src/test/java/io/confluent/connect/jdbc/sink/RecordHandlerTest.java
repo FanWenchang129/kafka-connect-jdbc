@@ -15,7 +15,6 @@
 
 package io.confluent.connect.jdbc.sink;
 
-import org.apache.derby.impl.store.raw.data.UpdateFieldOperation;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
@@ -28,6 +27,72 @@ import org.junit.rules.ExpectedException;
 import io.confluent.connect.jdbc.sink.metadata.RecordType;
 
 public class RecordHandlerTest extends RecordHandler{
+
+  @Test
+  public void testHandleOther () {
+    //TODO: testHandleOther
+  }
+
+  @Test
+  //FIXME: check resolved time
+  public void testHandleCdcResolved () {
+    final Schema schema= SchemaBuilder.struct()
+      .field("resolved", Schema.STRING_SCHEMA)
+      .build();
+
+    SinkRecord record = CdcRecordBuilder.resolved(schema)
+      .time("12345")
+      .build();
+    
+    checkValueSchemaName = false;
+    SinkRecord newRecord = super.handle(record);
+    checkValueSchemaName = true;
+
+    assert(newRecord == null) ; 
+  }
+
+  @Test
+  public void testHandleCdcUpsert () {
+    final Schema schema= SchemaBuilder.struct()
+      .field("id", Schema.INT32_SCHEMA)
+      .field("name", Schema.STRING_SCHEMA)
+      .field("age", Schema.INT32_SCHEMA)
+      .build();
+
+    SinkRecord record = CdcRecordBuilder.upsert(schema)
+      .pk("id", 1)
+      .col("id", 1)
+      .col("name", "nick")
+      .col("age", 12)
+      .build();
+    
+    checkValueSchemaName = false;
+    SinkRecord newRecord = super.handle(record);
+    checkValueSchemaName = true;
+
+    final Schema valueSchema= SchemaBuilder.struct()
+      .field("id", Schema.INT32_SCHEMA)
+      .field("name", Schema.STRING_SCHEMA)
+      .field("age", Schema.INT32_SCHEMA)
+      .build();
+
+    final Struct value = new Struct(valueSchema)
+      .put("id", 1)
+      .put("name", "nick")
+      .put("age", 12);
+
+    final Schema keySchema = SchemaBuilder.struct()
+      .field("id", Schema.INT32_SCHEMA)
+      .build();
+
+    final Struct key = new Struct(keySchema)
+      .put("id", 1);
+
+    final SinkRecord recordE = new SinkRecord("dummy", 0, keySchema, key, valueSchema, value, 0);
+    
+    assert(recordE.equals(newRecord)) ; 
+
+  }
 
   @Test
   public void testRecordTypeUpsert() {
@@ -43,10 +108,10 @@ public class RecordHandlerTest extends RecordHandler{
       .col("age", 12)
       .build();
 
-    utFlag = true;
+    checkValueSchemaName = false;
     RecordType recordType = super.getRecordType(record);
         assert (recordType.equals(RecordType.CDC));
-    utFlag = false;
+    checkValueSchemaName = true;
   }
 
   @Test
@@ -60,10 +125,10 @@ public class RecordHandlerTest extends RecordHandler{
       .time("12345")
       .build();
 
-    utFlag = true;
+    checkValueSchemaName = false;
     RecordType recordType = super.getRecordType(record);
         assert (recordType.equals(RecordType.RESOLVED));
-    utFlag = false;
+    checkValueSchemaName = true;
   }
 
   @Test
@@ -80,10 +145,10 @@ public class RecordHandlerTest extends RecordHandler{
 
     final SinkRecord recordA = new SinkRecord("dummy", 0, null, null, schemaA, valueA, 0);
 
-    utFlag = true;
+    checkValueSchemaName = false;
     RecordType recordType = super.getRecordType(recordA);
         assert (recordType.equals(RecordType.OTHER));
-    utFlag = false;
+    checkValueSchemaName = true;
   }
 
   @Test
@@ -101,10 +166,10 @@ public class RecordHandlerTest extends RecordHandler{
         .put("after","afterValue");
     final SinkRecord recordB = new  SinkRecord("dummy", 0, null, null, schemaB, valueB, 0);
     
-    utFlag = true;
+    checkValueSchemaName = false;
     RecordType recordType = getRecordType(recordB);
         assert (recordType.equals(RecordType.OTHER));
-    utFlag = false;
+    checkValueSchemaName = true;
   }
 
   @Rule
@@ -120,7 +185,7 @@ public class RecordHandlerTest extends RecordHandler{
     thrown.expect(DataException.class);
     thrown.expectMessage("Invalid Java object for schema type STRING: class java.lang.Boolean for field: \"updated\"");
     final Struct valueA = new Struct(schemaA)
-        .put("updated", true)
+        .put("updated", false)
         .put("after", "123");
   }
 
