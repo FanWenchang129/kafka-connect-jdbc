@@ -58,7 +58,7 @@ public class CdcRecordBuilder {
 }
 
 class DeleteRecordBuilder {
-
+  // TODO: CdcRecordHandler.delete()
 }
 
 class ResolvedRecordBuilder extends CdcRecordBuilder {

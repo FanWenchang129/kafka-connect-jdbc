@@ -74,7 +74,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
   
   @Test
   public void putGP() throws Exception {
-    String topic = "t_avro";
+    String topic = "test_avro_kafka_connect";
     int partition = 7;
     long offset = 42;
 
@@ -82,7 +82,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("name", "postgres");
     props.put("connector.class", "io.confluent.connect.jdbc.JdbcSinkConnector");
     props.put("topics", "t_avro");
-    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("connection.url", "jdbc:postgresql://localhost/test?user=postgres&password=postgres");
     props.put("auto.create", "false");
     props.put("dialect.name", "GreenplumDatabaseDialect");
     //props.put("auto.evolve", true);
@@ -91,6 +91,7 @@ public class JdbcSinkTaskTest extends EasyMockSupport {
     props.put("delete.enabled", "true"); 
     props.put("pk.mode", "record_key"); 
     props.put("pk.fields", "id"); 
+    props.put("cdc.upsert.func.name","func_upsert_test_avro_kafka_connect");
 
     JdbcSinkTask task = new JdbcSinkTask();
     task.initialize(mock(SinkTaskContext.class));
