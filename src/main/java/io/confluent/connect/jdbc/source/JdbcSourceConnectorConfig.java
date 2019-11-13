@@ -51,6 +51,11 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
 
   private static final Logger LOG = LoggerFactory.getLogger(JdbcSourceConnectorConfig.class);
 
+  public static final String CDC_UPSERT_FUNC_CONFIG = "cdc.upsert.func.name";
+  public static final String CDC_UPSERT_FUNC_DOC = "Function name of udf that implements upsert.";
+  public static final String CDC_UPSERT_FUNC_DISPLAY = "Upsert UDF Name";
+  public static final String CDC_UPSERT_FUNC_DEFAULT = "func_upsert";
+
   public static final String CONNECTION_URL_CONFIG = "connection.url";
   private static final String CONNECTION_URL_DOC = "JDBC connection URL.";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
@@ -299,6 +304,16 @@ public class JdbcSourceConnectorConfig extends AbstractConfig {
   private static final void addDatabaseOptions(ConfigDef config) {
     int orderInGroup = 0;
     config.define(
+        CDC_UPSERT_FUNC_CONFIG,
+        Type.STRING,
+        CDC_UPSERT_FUNC_DEFAULT,
+        Importance.HIGH,
+        CDC_UPSERT_FUNC_DOC,
+        DATABASE_GROUP,
+        ++orderInGroup,
+        Width.LONG,
+        CDC_UPSERT_FUNC_DISPLAY
+    ).define(
         CONNECTION_URL_CONFIG,
         Type.STRING,
         Importance.HIGH,

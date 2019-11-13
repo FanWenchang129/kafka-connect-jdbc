@@ -105,8 +105,6 @@ public class GreenplumDatabaseDialect extends GenericDatabaseDialect {
   }
 
   public ExpressionBuilder upsertExpressionBuilder() {
-    //TODO:
-    //To be configurable
     IdentifierRules rules = new IdentifierRules(".", "'","'");
     QuoteMethod quoteSqlIdentifiers = QuoteMethod.get(
          config.getString(JdbcSourceConnectorConfig.QUOTE_SQL_IDENTIFIERS_CONFIG)
@@ -122,7 +120,9 @@ public class GreenplumDatabaseDialect extends GenericDatabaseDialect {
   ) {
 
     ExpressionBuilder builder = upsertExpressionBuilder();
-    builder.append("SELECT fun_upsert(");
+    String funcName = config.getString(JdbcSourceConnectorConfig.CDC_UPSERT_FUNC_CONFIG);
+
+    builder.append("SELECT " + funcName +"(");
     builder.append(table);
     builder.append(",");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());

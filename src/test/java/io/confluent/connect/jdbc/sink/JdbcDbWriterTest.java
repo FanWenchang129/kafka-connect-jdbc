@@ -52,7 +52,7 @@ import static org.junit.Assert.*;
 public class JdbcDbWriterTest {
 
   private final SqliteHelper sqliteHelper = new SqliteHelper(getClass().getSimpleName());
-  private final PostgreSqlHelper postgreSqlHelper = new PostgreSqlHelper("localhost","postgres","postgres","postgres");
+  private final PostgreSqlHelper postgreSqlHelper = new PostgreSqlHelper("localhost","test","postgres","postgres");
 
   private JdbcDbWriter writer = null;
   private DatabaseDialect dialect;
@@ -61,6 +61,7 @@ public class JdbcDbWriterTest {
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
     postgreSqlHelper.setUp();
+    RecordHandler.CloseCheckValueSchemaName();
   }
 
   @After
@@ -259,12 +260,12 @@ public class JdbcDbWriterTest {
 
    @Test
   public void insertRecord() throws SQLException {
-    String topic = "t_avro";
+    String topic = "test_avro_kafka_connect";
     int partition = 7;
     long offset = 42;
 
     final HashMap<String,String> props = new HashMap<>();
-    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("connection.url", "jdbc:postgresql://localhost/test?user=postgres&password=postgres");
     props.put("auto.create", "false");
     //props.put("auto.evolve", true);
     //props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
@@ -272,6 +273,7 @@ public class JdbcDbWriterTest {
     props.put("delete.enabled", "true"); 
     props.put("pk.mode", "record_key"); 
     props.put("pk.fields", "id"); 
+    props.put("cdc.upsert.func.name", "func_upsert_test_avro_kafka_connect");
 
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = new GreenplumDatabaseDialect(config);
@@ -490,7 +492,7 @@ public class JdbcDbWriterTest {
   public void testCdc () throws Exception {
 
     //make a set of cdc records
-    String topic = "t_avro";
+    String topic = "test_avro_kafka_connect";
 
     final Schema upsertSchema= SchemaBuilder.struct()
     .field("id", Schema.INT32_SCHEMA)
@@ -556,7 +558,7 @@ public class JdbcDbWriterTest {
     //create a jdbcwriter
 
     final HashMap<String,String> props = new HashMap<>();
-    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("connection.url", "jdbc:postgresql://localhost/test?user=postgres&password=postgres");
     props.put("auto.create", "false");
     //props.put("auto.evolve", true);
     //props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
@@ -564,6 +566,7 @@ public class JdbcDbWriterTest {
     props.put("delete.enabled", "true"); 
     props.put("pk.mode", "record_key"); 
     props.put("pk.fields", "id"); 
+    props.put("cdc.upsert.func.name", "func_upsert_test_avro_kafka_connect");
 
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = new GreenplumDatabaseDialect(config);
@@ -600,7 +603,7 @@ public class JdbcDbWriterTest {
   @Test
   public void testCdcWithDuplicateAndOutOfOrder () throws SQLException {
     //make a set of cdc records
-    String topic = "t_avro";
+    String topic = "test_avro_kafka_connect";
 
     final Schema upsertSchema= SchemaBuilder.struct()
       .field("id", Schema.INT32_SCHEMA)
@@ -681,7 +684,7 @@ public class JdbcDbWriterTest {
     //create a jdbcwriter
 
     final HashMap<String,String> props = new HashMap<>();
-    props.put("connection.url", "jdbc:postgresql://localhost/postgres?user=postgres&password=postgres");
+    props.put("connection.url", "jdbc:postgresql://localhost/test?user=postgres&password=postgres");
     props.put("auto.create", "false");
     //props.put("auto.evolve", true);
     //props.put("batch.size", 1000); // sufficiently high to not cause flushes due to buffer being full
@@ -689,6 +692,7 @@ public class JdbcDbWriterTest {
     props.put("delete.enabled", "true"); 
     props.put("pk.mode", "record_key"); 
     props.put("pk.fields", "id"); 
+    props.put("cdc.upsert.func.name", "func_upsert_test_avro_kafka_connect"); 
 
     final JdbcSinkConfig config = new JdbcSinkConfig(props);
     dialect = new GreenplumDatabaseDialect(config);

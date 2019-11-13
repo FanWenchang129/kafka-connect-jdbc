@@ -163,7 +163,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
   @Test
   public void shouldBuildUpsertStatement() {
     assertEquals(
-        "SELECT fun_upsert(\'myTable\',?,?,?,?,?,?)",
+        "SELECT func_upsert(\'myTable\',?,?,?,?,?,?)",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
 
@@ -171,7 +171,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
     dialect = createDialect();
 
     assertEquals(
-        "SELECT fun_upsert(myTable,?,?,?,?,?,?)",
+        "SELECT func_upsert(myTable,?,?,?,?,?,?)",
         dialect.buildUpsertQueryStatement(tableId, pkColumns, columnsAtoD)
     );
   }
@@ -221,7 +221,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
   public void upsert() {
     TableId customer = tableId("Customer");
     assertEquals(
-        "SELECT fun_upsert(\'Customer\',?,?,?,?)",
+        "SELECT func_upsert(\'Customer\',?,?,?,?)",
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
@@ -231,7 +231,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
      
 
     assertEquals(
-            "SELECT fun_upsert(\'Customer\',?,?,?,?)",
+            "SELECT func_upsert(\'Customer\',?,?,?,?)",
             dialect.buildUpsertQueryStatement(
                     customer,
                     columns(customer, "id", "name", "salary", "address"),
@@ -243,7 +243,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
     dialect = createDialect();
 
     assertEquals(
-        "SELECT fun_upsert(Customer,?,?,?,?)",
+        "SELECT func_upsert(Customer,?,?,?,?)",
         dialect.buildUpsertQueryStatement(
             customer,
             columns(customer, "id"),
@@ -252,7 +252,7 @@ public class GreenplumDatabaseDialectTest extends BaseDialectTest<GreenplumDatab
     );
 
     assertEquals(
-            "SELECT fun_upsert(Customer,?,?,?,?)",
+            "SELECT func_upsert(Customer,?,?,?,?)",
             dialect.buildUpsertQueryStatement(
                     customer,
                     columns(customer, "id", "name", "salary", "address"),

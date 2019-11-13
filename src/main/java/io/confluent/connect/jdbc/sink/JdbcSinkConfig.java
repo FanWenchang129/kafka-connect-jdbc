@@ -63,6 +63,11 @@ public class JdbcSinkConfig extends AbstractConfig {
       )
   );
 
+  public static final String CDC_UPSERT_FUNC_CONFIG = "cdc.upsert.func.name";
+  public static final String CDC_UPSERT_FUNC_DOC = "Function name of udf that implements upsert.";
+  public static final String CDC_UPSERT_FUNC_DISPLAY = "Upsert UDF Name";
+  public static final String CDC_UPSERT_FUNC_DEFAULT = "func_upsert";
+
   public static final String CONNECTION_URL = JdbcSourceConnectorConfig.CONNECTION_URL_CONFIG;
   private static final String CONNECTION_URL_DOC = "JDBC connection URL.";
   private static final String CONNECTION_URL_DISPLAY = "JDBC URL";
@@ -358,6 +363,16 @@ public class JdbcSinkConfig extends AbstractConfig {
           5,
           ConfigDef.Width.MEDIUM,
           DB_TIMEZONE_CONFIG_DISPLAY
+        ).define(
+            CDC_UPSERT_FUNC_CONFIG,
+            ConfigDef.Type.STRING,
+            CDC_UPSERT_FUNC_DEFAULT,
+            ConfigDef.Importance.HIGH,
+            CDC_UPSERT_FUNC_DOC,
+            DATAMAPPING_GROUP,
+            6,
+            ConfigDef.Width.LONG,
+            CDC_UPSERT_FUNC_DISPLAY
         )
         // DDL
         .define(
