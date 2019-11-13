@@ -54,9 +54,6 @@ public class JdbcDbWriter {
 
   void write(final Collection<SinkRecord> records) throws SQLException {
     final Connection connection = cachedConnectionProvider.getConnection();
-    //FIXME: 
-    RecordHandler handler = new RecordHandler();
-    handler.CloseCheckValueSchemaName();
 
     final Map<TableId, BufferedRecords> bufferByTable = new HashMap<>();
     for (SinkRecord record : records) {  
@@ -66,7 +63,7 @@ public class JdbcDbWriter {
         buffer = new BufferedRecords(config, tableId, dbDialect, dbStructure, connection);
         bufferByTable.put(tableId, buffer);
       }
-      SinkRecord newRecord = handler.handle(record);
+      SinkRecord newRecord = RecordHandler.handle(record);
       if (newRecord != null) {
         buffer.add(newRecord);
       }

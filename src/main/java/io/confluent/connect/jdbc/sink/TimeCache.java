@@ -26,6 +26,7 @@ public class TimeCache {
     time = -1;
   }
 
+  // TODO: add ut test
   // 静态初始化实例
   public static TimeCache getTimeCacheInstance() {
     return timeCacheInstance;
