@@ -122,7 +122,7 @@ public class GreenplumDatabaseDialect extends GenericDatabaseDialect {
     ExpressionBuilder builder = upsertExpressionBuilder();
     String funcName = config.getString(JdbcSourceConnectorConfig.CDC_UPSERT_FUNC_CONFIG);
 
-    builder.append("SELECT " + funcName +"(");
+    builder.append("SELECT " + funcName + "(");
     builder.append(table);
     builder.append(",");
     builder.appendMultiple(",", "?", keyColumns.size() + nonKeyColumns.size());

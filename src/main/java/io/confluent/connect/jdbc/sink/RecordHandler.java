@@ -83,8 +83,8 @@ public class RecordHandler {
       Schema orgiValueSchema = record.valueSchema();
       if (!isNull(orgiValueSchema)) {
         String valueSchemaName = orgiValueSchema.name();
-        if (!isNull(valueSchemaName) ) {
-          if (valueSchemaName.equals(record.topic()+ "_envelope")){
+        if (!isNull(valueSchemaName)) {
+          if (valueSchemaName.equals(record.topic() + "_envelope")) {
             maybeCdc = true;
           }
         }
@@ -96,21 +96,22 @@ public class RecordHandler {
   protected static RecordType getRecordType(SinkRecord record) {
     RecordType type = RecordType.OTHER;
     if (maybeCdcRecord(record)) {
-      if(record.valueSchema() != null) {
+      if (record.valueSchema() != null) {
         List<Field> fields = record.valueSchema().fields();
         Map<String, Field> fmap = new HashMap<String, Field>(); 
-        for( Field field : fields) {
+        for  (Field field : fields) {
           fmap.put(field.name(), field);
         }
-        Field updatedField  = fmap.containsKey("updated" )? fmap.get("updated") :null;
-        Field afterField    = fmap.containsKey("after"   )? fmap.get("after")   :null;
-        Field resolvedField = fmap.containsKey("resolved")? fmap.get("resolved"):null;
+        Field updatedField  = fmap.containsKey("updated") ? fmap.get("updated") : null;
+        Field afterField    = fmap.containsKey("after") ? fmap.get("after") : null;
+        Field resolvedField = fmap.containsKey("resolved") ? fmap.get("resolved") : null;
 
-        if (updatedField !=null && afterField != null &&  resolvedField == null &&
-            updatedField.schema().type() == Schema.Type.STRING &&
-            afterField.schema().type() == Schema.Type.STRUCT) { type = RecordType.CDC;
-        } else if (updatedField == null && afterField == null &&  resolvedField !=null && 
-          resolvedField.schema().type() == Schema.Type.STRING) {
+        if (updatedField != null && afterField != null &&  resolvedField == null 
+            && updatedField.schema().type() == Schema.Type.STRING 
+            && afterField.schema().type() == Schema.Type.STRUCT) { 
+          type = RecordType.CDC;
+        } else if (updatedField == null && afterField == null &&  resolvedField != null 
+            && resolvedField.schema().type() == Schema.Type.STRING) {
           type = RecordType.RESOLVED;
         }
       }
@@ -124,18 +125,20 @@ public class RecordHandler {
       return RecordType.OTHER;
     }
     String valueSchemaName = orgiValueSchema.name();
-    if (isNull(valueSchemaName) && !checkValueSchemaName) { return RecordType.OTHER; } 
+    if (isNull(valueSchemaName) && !checkValueSchemaName) { 
+      return RecordType.OTHER;
+    } 
     String topicName = record.topic();
     if (valueSchemaName == (topicName + "_envelope") || checkValueSchemaName) {
       List<Field> fields = orgiValueSchema.fields();
       Map<String, Field> fmap = new HashMap<String, Field>(); 
-      for( Field field : fields) {
+      for (Field field : fields) {
         fmap.put(field.name(), field);
       }
 
-      Field updatedField = fmap.containsKey("updated")? fmap.get("updated"):null;
-      Field afterField = fmap.containsKey("after")? fmap.get("after"):null;
-      Field resolvedField = fmap.containsKey("resolved")? fmap.get("resolved"):null;
+      Field updatedField = fmap.containsKey("updated") ? fmap.get("updated") : null;
+      Field afterField = fmap.containsKey("after") ? fmap.get("after") : null;
+      Field resolvedField = fmap.containsKey("resolved") ? fmap.get("resolved") : null;
 
       if (!isNull(resolvedField)) {
         List<Field> fieldsList = orgiValueSchema.fields();
