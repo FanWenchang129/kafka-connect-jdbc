@@ -61,7 +61,7 @@ public class JdbcDbWriterTest {
   public void setUp() throws IOException, SQLException {
     sqliteHelper.setUp();
     postgreSqlHelper.setUp();
-    RecordHandler.CloseCheckValueSchemaName();
+    RecordHandler.closeCheckValueSchemaName();
   }
 
   @After

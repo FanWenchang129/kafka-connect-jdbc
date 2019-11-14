@@ -48,7 +48,7 @@ public class RecordHandler {
     return newRecord;
   }
 
-  public static void CloseCheckValueSchemaName() {
+  public static void closeCheckValueSchemaName() {
     checkValueSchemaName = false;
   }
 
@@ -99,63 +99,27 @@ public class RecordHandler {
       if (record.valueSchema() != null) {
         List<Field> fields = record.valueSchema().fields();
         Map<String, Field> fmap = new HashMap<String, Field>(); 
-        for  (Field field : fields) {
+        for (Field field : fields) {
           fmap.put(field.name(), field);
-        }
-        Field updatedField  = fmap.containsKey("updated") ? fmap.get("updated") : null;
-        Field afterField    = fmap.containsKey("after") ? fmap.get("after") : null;
-        Field resolvedField = fmap.containsKey("resolved") ? fmap.get("resolved") : null;
-
-        if (updatedField != null && afterField != null &&  resolvedField == null 
-            && updatedField.schema().type() == Schema.Type.STRING 
-            && afterField.schema().type() == Schema.Type.STRUCT) { 
+        }    
+        
+        if (fmap.containsKey("updated") && fmap.containsKey("after")) {
+          // if (updatedField.schema().type() == Schema.Type.STRING 
+          //     && afterField.schema().type() == Schema.Type.STRUCT) { 
+          //   type = RecordType.CDC;
+          // } 
           type = RecordType.CDC;
-        } else if (updatedField == null && afterField == null &&  resolvedField != null 
-            && resolvedField.schema().type() == Schema.Type.STRING) {
-          type = RecordType.RESOLVED;
         }
+    
+        if (fmap.containsKey("resolved")) {
+          // if (resolvedField.schema().type() == Schema.Type.STRING) {
+          //   type = RecordType.RESOLVED;
+          // }
+          type = RecordType.RESOLVED;
+        }      
       }
     }
     return type;
-  }
-
-  protected RecordType getRecordType2(SinkRecord record) {
-    Schema orgiValueSchema = record.valueSchema();
-    if (isNull(orgiValueSchema)) {
-      return RecordType.OTHER;
-    }
-    String valueSchemaName = orgiValueSchema.name();
-    if (isNull(valueSchemaName) && !checkValueSchemaName) { 
-      return RecordType.OTHER;
-    } 
-    String topicName = record.topic();
-    if (valueSchemaName == (topicName + "_envelope") || checkValueSchemaName) {
-      List<Field> fields = orgiValueSchema.fields();
-      Map<String, Field> fmap = new HashMap<String, Field>(); 
-      for (Field field : fields) {
-        fmap.put(field.name(), field);
-      }
-
-      Field updatedField = fmap.containsKey("updated") ? fmap.get("updated") : null;
-      Field afterField = fmap.containsKey("after") ? fmap.get("after") : null;
-      Field resolvedField = fmap.containsKey("resolved") ? fmap.get("resolved") : null;
-
-      if (!isNull(resolvedField)) {
-        List<Field> fieldsList = orgiValueSchema.fields();
-        if (fieldsList.size() == 1) {
-          return RecordType.RESOLVED;
-        } else {
-          return RecordType.OTHER;
-        }
-      }
-
-      if (isNull(updatedField) || isNull(afterField)) {
-        return RecordType.OTHER;
-      }
-      return RecordType.CDC;
-    }
-
-    return RecordType.OTHER;
   }
 
   protected static SinkRecord expandValueSchema(SinkRecord record) {
