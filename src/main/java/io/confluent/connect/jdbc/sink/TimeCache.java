@@ -15,7 +15,11 @@
 
 package io.confluent.connect.jdbc.sink;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class TimeCache {
+  private static final Logger log = LoggerFactory.getLogger(TimeCache.class);
   // 静态变量，自己的对象实例
   private static TimeCache timeCacheInstance = new TimeCache();
   // 时间变量
@@ -35,7 +39,10 @@ public class TimeCache {
   public void updateTime(long newTime) {
     if (this.time == -1 || this.time < newTime) {
       this.time = newTime;
-      System.out.printf("Time updated successes.Time : %d \n", this.time);
+      log.debug(
+          "Time updated successes.Time : %d \n",
+          this.time
+      );
     } else {
       return;
     }
