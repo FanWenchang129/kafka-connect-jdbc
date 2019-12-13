@@ -1,0 +1,7 @@
+id||int||id[:inc(id,50001)]
+name||text||[:name]
+age||int||[:age]
+phone||int||[:phone_number]
+email||text||[:email]
+address||text||[:address]
+time||text||[:datetime(1,%Y-%m-%d %H:%M:%S)]
